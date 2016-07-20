@@ -19,7 +19,7 @@ class AgentThread(Thread):
         self.actions = self.ale.getMinimalActionSet()
 
         self.globalNet = globalNet
-        self.computation  = AgentComputation(globalNet)
+        self.computation  = AgentComputation(globalNet, 'computation_'+str(ident))
         self.f = open('output_thread_'+str(ident), 'w')
 
         self.t = 0
@@ -58,7 +58,7 @@ class AgentThread(Thread):
                 epsilon = 1 + (self.epsilon_end - 1) * T / constants.final_e_frame
 
             rnd = random()
-            action = randrange(0,len(self.actions)) if rnd < epsilon else self.globalNet.getBestAction(state.transpose(2,0,1)[np.newaxis])[0]
+            action = randrange(0,len(self.actions)) if rnd < epsilon else self.computation.getBestAction(state.transpose(2,0,1)[np.newaxis])[0]
             action_batch.append(action)
             
 
@@ -72,7 +72,7 @@ class AgentThread(Thread):
 
             state = np.maximum.reduce(images[0:i], axis=0)
 
-            discounted_reward = 0 if self.ale.game_over() else self.globalNet.getCriticScore(state.transpose(2,0,1)[np.newaxis])[0]
+            discounted_reward = 0 if self.ale.game_over() else self.computation.getCriticScore(state.transpose(2,0,1)[np.newaxis])[0]
             
 
             score += reward
