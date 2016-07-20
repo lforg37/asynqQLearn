@@ -6,6 +6,7 @@ from threading import Lock
 from Agent import AgentThread
 
 def main():
+    print("Est-ce que ce print s'affiche ?????")
     if len(sys.argv) < 2:
         print("Missing rom name !")
         return
@@ -26,5 +27,6 @@ def main():
     for t in agentpool:
         t.start()
 
+print("Est-ce que ce print s'affiche ?????")
 if __name__ == "__main__":
     main()

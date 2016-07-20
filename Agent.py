@@ -3,6 +3,7 @@ from parameters import shared, constants
 from ale_python_interface import ALEInterface
 from random import random, randrange
 from network import AgentComputation
+import sys
 from improc import NearestNeighboorInterpolator2D
 
 import numpy as np
@@ -19,6 +20,7 @@ class AgentThread(Thread):
 
         self.globalNet = globalNet
         self.computation  = AgentComputation(globalNet)
+        self.f = open('output_thread_'+str(ident), 'w')
 
         self.t = 0
         self.scores = []
@@ -83,16 +85,19 @@ class AgentThread(Thread):
                 state_batch  = []
             
             if T % constants.critic_up_freq == 0:
-                print("Update critic !")
+                self.f.write("Update critic !\n")
+                self.f.flush()
                 self.globalNet.update_critic()
             
             if self.ale.game_over():
-                print("["+str(self.id)+"] Game ended with score of : "+str(score))
+                self.f.write("["+str(self.id)+"] Game ended with score of : "+str(score) + "\n")
+                self.f.flush()
                 self.ale.reset_game()
                 self.scores.append(score)
                 if len(self.scores) >= 12:
                     moy = sum(self.scores) / len(self.scores)
-                    print("Average scores for last 12 games for thread "+str(self.id)+ " : " + str(moy))
+                    self.f.write("Average scores for last 12 games for thread "+str(self.id)+ " : " + str(moy)+"\n")
+                    self.f.flush()
                     self.scores = []
                 score = 0
 

@@ -13,12 +13,11 @@ class ConvLayer:
         self.inputs = inputs
         self.W = theano.shared(
                     np.asarray(
-                        rng.normal(size=filter_shape) 
+                        rng.normal(size=filter_shape),
                     ),
                     borrow = True,
                     name   = name_prefix+"_W"
                 )
-        print(self.W.get_value().shape)
         
         self.b = theano.shared(np.zeros(filter_shape[0]) + 0.01,
                                 borrow = True,
@@ -61,7 +60,7 @@ class FullyConectedLayer:
 class DeepQNet:
     def __init__(self, n_sorties, prefix):
         rng = np.random.RandomState(42)
-        self.inputs = T.tensor4(name=prefix+"_input")
+        self.inputs   = T.dtensor4(name=prefix+"_input")
         conv1         = ConvLayer(rng, 
                         self.inputs,
                         constants.conv1_shape,
@@ -132,7 +131,7 @@ class DeepQNet:
         self.critic_score   = T.max(fcl2_critic.output)
 
         self.actions = T.ivector(prefix+'_actionsVector');
-        self.labels  = T.vector(prefix+'_labels')
+        self.labels  = T.dvector(prefix+'_labels')
 
         self.actions_scores = fcl2.output[T.arange(self.actions.shape[0]), self.actions]
         self.error = T.mean(.5 * (self.actions_scores - self.labels)**2)
