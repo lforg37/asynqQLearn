@@ -12,7 +12,7 @@ class constants:
     cnn_output_size = conv2_zwidth * 9 * 9
     fcl1_nbUnit     = 256
     max_noop        = 30
-    final_e_frame   = 1000000
+    final_e_frame   = 4000000
     action_repeat   = 4
     discount_factor = 0.99
     decay_factor    = 0.95

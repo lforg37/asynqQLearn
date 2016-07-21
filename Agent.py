@@ -60,6 +60,7 @@ class AgentThread(Thread):
             rnd = random()
             action = randrange(0,len(self.actions)) if rnd < epsilon else self.computation.getBestAction(state.transpose(2,0,1)[np.newaxis])[0]
             action_batch.append(action)
+            self.t += 1
             
 
             reward = 0
@@ -83,7 +84,8 @@ class AgentThread(Thread):
                 reward_batch = []
                 action_batch = []
                 state_batch  = []
-            
+                self.t = 0
+
             if T % constants.critic_up_freq == 0:
                 self.f.write("Update critic !\n")
                 self.f.flush()
@@ -105,4 +107,3 @@ class AgentThread(Thread):
                 T = shared.T
                 shared.T += 1
 
-            self.t += 1
