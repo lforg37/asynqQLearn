@@ -2,8 +2,10 @@ import sys
 from ale_python_interface import ALEInterface
 from parameters           import constants
 from network import DeepQNet
-from Agent import AgentThread
+from Agent import AgentProcess
 from RWLock import RWLock
+import multiprocessing as mp
+import ctypes
 
 
 def main():
@@ -18,15 +20,25 @@ def main():
 
     dqn = DeepQNet(nb_actions, "mainDQN")
     
-    sem = BoundedSemaphore(constants.nb_agent) 
+    rwlock = RWLock()
     
     agentpool = []
+    
+    T = mp.RawValue(ctypes.c_uint)
+    T = 0
+    TLock = mp.Lock()
 
-    for i in range(0, constants.nb_thread):
-        agentpool.append(AgentThread(lock, dqn, romname, i))
+    for i in range(0, constants.nb_agent):
+        agentpool.append(mp.Process(target = AgentProcess, args=[rwlock, dqn, T, TLock, romname, i]))
     
     for t in agentpool:
         t.start()
 
+    for t in agentpool:
+        t.join()
+
+    dqn.save('network')
+
 if __name__ == "__main__":
+    mp.set_start_method('spawn')
     main()

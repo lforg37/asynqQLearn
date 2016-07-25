@@ -1,4 +1,4 @@
-from parameters import shared, constants
+from parameters import constants
 from ale_python_interface import ALEInterface
 from random import random, randrange
 from network import AgentComputation
@@ -63,7 +63,7 @@ def AgentProcess(rwlock, globalNet, T_glob, T_lock, game_path, ident):
             rwlock.reader_acquire() 
             action = computation.getBestAction(state.transpose(2,0,1)[np.newaxis])[0]
             rwlock.reader_release()
-        self.t += 1
+        t += 1
             
         reward = 0
         i      = 0
@@ -85,24 +85,24 @@ def AgentProcess(rwlock, globalNet, T_glob, T_lock, game_path, ident):
         score += reward
         computation.cumulateGradient(
                     np.asarray(old_state.transpose(2,0,1)[np.newaxis]), 
-                    np.asarray(action, dtype=np.int32), 
-                    np.asarray(discounted_reward))
+                    np.asarray(action, dtype=np.int32)[np.newaxis], 
+                    np.asarray(discounted_reward)[np.newaxis])
 
         if t % constants.batch_size == 0 or ale.game_over():
-            lr = init_learning_rate * (1 - T/nb_max_frames)
+            lr = init_learning_rate * (1 - T/constants.nb_max_frames)
             rwlock.writer_acquire()
             computation.applyGradient(lr)
             rwlock.writer_release()
-            self.t = 0
+            t = 0
 
         if T % constants.critic_up_freq == 0:
             f.write("Update critic !\n")
             f.flush()
             rwlock.writer_acquire()
-            globalNet.update_critic()
+            computation.update_critic()
             rwlock.writer_release()
             
-        if self.ale.game_over():
+        if ale.game_over():
             f.write("["+str(ident)+"] Game ended with score of : "+str(score) + "\n")
             f.flush()
             ale.reset_game()
