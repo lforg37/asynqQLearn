@@ -20,7 +20,9 @@ def AgentProcess(rwlock, globalNet, T_glob, T_lock, game_path, ident):
     ale.loadROM(game_path)
     actions = ale.getMinimalActionSet()
 
-    computation  = AgentComputation(globalNet, 'computation_'+str(ident))
+    computation = AgentComputation(globalNet, 'computation_'+str(ident))
+
+    init_learning_rate = logUniform()
 
     f = open('output_thread_'+str(ident), 'w')
 
@@ -64,7 +66,7 @@ def AgentProcess(rwlock, globalNet, T_glob, T_lock, game_path, ident):
         self.t += 1
             
         reward = 0
-        i = 0
+        i      = 0
         while i < constants.action_repeat and not ale.game_over():
             reward += ale.act(actions[action])
             ale.getScreenGrayscale(current_frame)
@@ -86,10 +88,10 @@ def AgentProcess(rwlock, globalNet, T_glob, T_lock, game_path, ident):
                     np.asarray(action, dtype=np.int32), 
                     np.asarray(discounted_reward))
 
-
         if t % constants.batch_size == 0 or ale.game_over():
+            lr = init_learning_rate * (1 - T/nb_max_frames)
             rwlock.writer_acquire()
-            computation.applyGradient()
+            computation.applyGradient(lr)
             rwlock.writer_release()
             self.t = 0
 

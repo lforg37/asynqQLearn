@@ -3,15 +3,28 @@ from theano import function
 from theano import tensor as T
 from theano.tensor.nnet import conv2d
 from theano import shared
+import multiprocessing as mp
+import ctypes
+from operator import mul
 
 import numpy as np
 
 from parameters import constants
+
 class ConvLayer:
-    def __init__(self, convl, inputs, filter_shape, stride):
+    def __init__(self, convl, inputs, filter_shape, stride, name_prefix):
         self.inputs = inputs
-        self.W = convl.W        
-        self.b = convl.b
+        self.W = shared(
+                        np.frombuffer(convl.W.get_obj()).resize(filter_shape), 
+                        borrow = True,
+                        name = name_prefix^+ "_w"
+                    )
+        self.b = shared(
+                        np.frombuffer(convl.b.get_obj()).resize(filter_shape[0]),
+                        borrow = True,
+                        name = name_prefix + "_b"
+                    )
+
 
         conv_out = conv2d(
                     input = inputs,
@@ -20,49 +33,88 @@ class ConvLayer:
                     subsample    = stride
                 )
 
+
         addition = conv_out + self.b.dimshuffle('x', 0, 'x', 'x')
         self.out = T.nnet.relu(addition)
         self.params = [self.W, self.b]
+        
+        self.meansquare_param = []
+
+        if convl.mean_square:
+            self.W_ms = shared(
+                            np.frombuffer(convl.W_ms.get_obj()).reshape(filter_shape),
+                            borrow = True,
+                            name = name_prefix+"_WMS"
+                        )
+            self.b_ms = shared(
+                            npo.frombuffer(convl.b_ms.get_obj()),
+                            borrow = True, 
+                            name = name_prefix+"_WMS"
+                        )
+            self.meansquare_param = [self.W_ms, self.b_ms]
+
 
 class ConvLayerVars:
-    def __init__(self, rng, filter_shape, name_prefix):
-        self.W = theano.shared(
-                    np.asarray(
-                        rng.normal(size=filter_shape),
-                    ),
-                    borrow = True,
-                    name   = name_prefix+"_W"
-                )
+    def __init__(self, rng, filter_shape, meansquare = False):
+        self.W = mp.RawArray(ctypes.c_double, reduce(mul, filter_shape))
+
+        w = np.frombuffer(self.W.get_obj()).reshape(filter_shape)
+        np.copyto(w, np.asarray(rng.normal(size=filter_shape)))
         
-        self.b = theano.shared(np.zeros(filter_shape[0]) + 0.01,
-                                borrow = True,
-                                name   = name_prefix+"_b"
-                            )
-        self.params = [self.W, self.b]
+        self.b = mp.RawArray(ctypes.c_double, filter_shape([0])
+        
+        b = np.frombuffer(self.b.get_obj())
+        b[:] = 0.01
+
+        self.mean_square = meansquare 
+        if mean_square:
+            self.W_ms  = mp.RawArray(ctypes.c_double, reduce(mul, filter_shape))
+            w_ms = np.frombuffer(self.W.get_obj())
+            w_ms[:] = 1
+
+            self.b_ms = mp.RawArray(ctypes.c_double, filter_shape[0])
+            b_ms = np.frombuffer(self.b_ms.get_obj())
+            b_ms[:] = 1
+        
 
 class FullyConectedLayerVars:
-    def __init__(self, rng, nb_inputs, nb_outputs, name_prefix):
-        self.W = theano.shared(
-                        np.asarray(
-                            rng.normal(size = [nb_inputs, nb_outputs])
-                        ),
-                        borrow = True,
-                        name   = name_prefix + "_W"
-                    )
+    def __init__(self, rng, nb_inputs, nb_outputs, meansquare=False):
+        self.shape = [nb_inputs, nb_outputs]
+        self.W     = mp.RawArray(ctypes.c_double, nb_inputs * nb_outputs)
 
-        self.b = theano.shared(
-                    np.zeros(nb_outputs) + 0.01,
-                    borrow = True,
-                    name = name_prefix + "_b"
-                )
-        self.params = [self.W, self.b]
+        w = np.frombuffer(self.W.get_obj()).reshape(self.shape)
+        np.copyto(w, np.asarray(rng.normal(size=self.shape)))
+
+        self.b    = mp.RawArray(ctypes.c_double, nb_outputs)
+
+        b = np.frombuffer(self.b.get_obj())
+        b[:] = 0.01
+
+        self.mean_square = meansquare
+
+        if meansquare:
+            self.W_ms  = mp.RawArray(ctypes.c_double, nb_inputs * nb_outputs)
+            w_ms = np.frombuffer(self.W.get_obj())
+            w_ms[:] = 1
+
+            self.b_ms = mp.RawArray(ctypes.c_double, nb_outputs)
+            b_ms = np.frombuffer(self.b_ms.get_obj())
+            b_ms[:] = 1
 
 class FullyConectedLayer:
-    def __init__(self, inputs,  fcl, activation):
+    def __init__(self, inputs,  fcl, activation, name_prefix):
         self.inputs = inputs
 
-        self.W = fcl.W
-        self.b = fcl.b
+        self.W = shared(
+                        np.frombuffer(fcl.W.get_obj()).reshape(fcl.shape),
+                        borrow = True,
+                        name = name_prefix + "_w"
+                    )
+        self.b = shared(
+                        np.frombuffer(fcl.b.get_obj()),
+                        borrow = True,
+                        name = name_prefix + "_b"
+                    )
         
         lin_output = T.dot(inputs, self.W) + self.b
         
@@ -70,70 +122,64 @@ class FullyConectedLayer:
 
         self.params = [self.W, self.b]
 
+        self.meansquare_param = []
+
+        if fcl.mean_square:
+            self.W_ms = shared(
+                            np.frombuffer(fcl.W_ms.get_obj()).reshape(fcl.shape),
+                            borrow = True,
+                            name = name_prefix+"_WMS"
+                        )
+            self.b_ms = shared(
+                            npo.frombuffer(fcl.b_ms.get_obj()),
+                            borrow = True, 
+                            name = name_prefix+"_WMS"
+                        )
+            self.meansquare_param = [self.W_ms, self.b_ms]
 
 class DeepQNet:
     def __init__(self, n_sorties, prefix):
         rng = np.random.RandomState(42)
         self.conv1         = ConvLayerVars(rng, 
-                        constants.conv1_shape,
-                        prefix+"_conv1"
-                    )
+                                constants.conv1_shape
+                            )
+
         self.conv1_critic  = ConvLayerVars(rng, 
-                        constants.conv1_shape,
-                        prefix+"_conv1_critic"
-                    )
+                                constants.conv1_shape
+                            )
 
         self.conv2         = ConvLayerVars(rng, 
-                        constants.conv2_shape,
-                        prefix+"_conv2"
-                    )
+                                constants.conv2_shape
+                            )
 
         self.conv2_critic  = ConvLayerVars(rng, 
-                        constants.conv2_shape,
-                        prefix+"_conv2_critic"
-                    )
+                                constants.conv2_shape
+                            )
 
     
         self.fcl1         = FullyConectedLayerVars(rng, 
                                 constants.cnn_output_size,
                                 constants.fcl1_nbUnit,
-                                prefix+"_fcl1"
+                                True
                             )
 
         self.fcl1_critic = FullyConectedLayerVars(rng,
                                 constants.cnn_output_size,
-                                constants.fcl1_nbUnit,
-                                prefix+"_fcl1_critic"
+                                constants.fcl1_nbUnit
                             )
 
         self.fcl2        = FullyConectedLayerVars(rng,
                                 constants.fcl1_nbUnit,
                                 n_sorties,
-                                prefix+"_fcl2"
+                                True
                             )
 
         self.fcl2_critic = FullyConectedLayerVars(rng,
                                 constants.fcl1_nbUnit,
-                                n_sorties,
-                                prefix+"_fcl2_critic"
+                                n_sorties
                             )
+
         
-        self.params  = self.conv1.params + \
-                      self.conv2.params + \
-                      self.fcl1.params  + \
-                      self.fcl2.params
-        self.meanSquareGrad = [shared(np.ones(param.get_value().shape)) for param in self.params]
-
-        self.update_critic = function([],[], updates=[
-                    (self.conv1_critic.W, self.conv1.W),
-                    (self.conv1_critic.b, self.conv1.b),
-                    (self.conv2_critic.W, self.conv2.W),
-                    (self.conv2_critic.b, self.conv2.b),
-                    (self.fcl1_critic.W,  self.fcl1.W),
-                    (self.fcl1_critic.b,  self.fcl1.b),
-                    (self.fcl2_critic.W,  self.fcl2.W),
-                    (self.fcl2_critic.b,  self.fcl2.b)])
-
 class AgentComputation:
     def __init__(self, network, prefix):
         self.network = network
@@ -187,11 +233,24 @@ class AgentComputation:
                                 network.fcl2_critic,
                                 None,
                             )
-        
-        self.params  = conv1.params + \
-                      conv2.params + \
-                      fcl1.params  + \
-                      fcl2.params
+
+        self.update_critic = function([],[], updates=[
+                    (self.conv1_critic.W, self.conv1.W),
+                    (self.conv1_critic.b, self.conv1.b),
+                    (self.conv2_critic.W, self.conv2.W),
+                    (self.conv2_critic.b, self.conv2.b),
+                    (self.fcl1_critic.W,  self.fcl1.W),
+                    (self.fcl1_critic.b,  self.fcl1.b),
+                    (self.fcl2_critic.W,  self.fcl2.W),
+                    (self.fcl2_critic.b,  self.fcl2.b)])
+
+        self.updatable = [conv1, conv2, fcl1, fcl2] 
+
+        self.params = []
+        self.meansquare_params = []
+        for layer in self.updatable:
+            self.params            += layer.params
+            self.meansquare_params += layer.meansquare_param
 
         self.best_actions   = T.argmax(fcl2.output)
         self.critic_score   = T.max(fcl2_critic.output)
@@ -209,7 +268,7 @@ class AgentComputation:
         self.getCriticScore = function([self.inputs],[self.critic_score])
 
         self.learning_rate = T.dscalar()
-        self.gradientsAcc = [shared(np.zeros(param.get_value().shape)) for param in self.network.params]
+        self.gradientsAcc = [shared(np.zeros(param.get_value().shape)) for param in self.params]
         self.clearGradients()
         accGradUpdates = [(accGradient, accGradient + gradient) \
                             for accGradient, gradient in zip(self.gradientsAcc, self.gradients)]
@@ -219,13 +278,13 @@ class AgentComputation:
                                     updates = accGradUpdates)
 
         meansquare_update = [(ms, constants.decay_factor * ms + (1-constants.decay_factor) * T.sqr(grad))\
-                                for ms, grad in zip(self.network.meanSquareGrad, self.gradientsAcc)]
+                                for ms, grad in zip(self.meansquare_params, self.gradientsAcc)]
 
         param_update  =  [(param, 
                           param - self.learning_rate * gradient / T.sqrt(square_mean + constants.epsilon_cancel)) \
                         for param, gradient, square_mean in zip(self.params, 
                                     self.gradientsAcc,
-                                    self.network.meanSquareGrad
+                                    self.meansquare_param
                                 )]
 
         self.applyGradient = function([self.learning_rate],[],updates = meansquare_update + param_update)
