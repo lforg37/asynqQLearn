@@ -1,5 +1,4 @@
-import theano
-from theano import function
+import theano as th
 from theano import tensor as T
 from theano.tensor.nnet import conv2d
 from theano import shared
@@ -163,56 +162,69 @@ class FullyConectedLayer:
             self.meansquare_param = [self.W_ms, self.b_ms]
 
 class DeepQNet:
-    def __init__(self, n_sorties, prefix):
+    def __init__(self, n_sorties, prefix, mean_square_buffer):
         rng = np.random.RandomState(42)
-        self.conv1         = ConvLayerVars(rng, 
+        self.prefix = prefix
+        self.conv1_hold = ConvLayerVars(rng, 
                                 constants.conv1_shape,
-                                "conv1",
-                                True
+                                prefix +"_conv1",
+                                mean_square_buffer
                             )
 
-        self.conv1_critic  = ConvLayerVars(rng, 
-                                constants.conv1_shape
-                            )
-
-        self.conv2         = ConvLayerVars(rng, 
+        self.conv2_hold = ConvLayerVars(rng, 
                                 constants.conv2_shape,
-                                "conv2",
-                                True
+                                prefix + "_conv2",
+                                mean_square_buffer
                             )
 
-        self.conv2_critic  = ConvLayerVars(rng, 
-                                constants.conv2_shape
-                            )
-
-    
-        self.fcl1         = FullyConectedLayerVars(rng, 
+        self.fcl1_hold  = FullyConectedLayerVars(rng, 
                                 constants.cnn_output_size,
                                 constants.fcl1_nbUnit,
-                                "fcl1",
-                                True
+                                prefix + "_fcl1",
+                                mean_square_buffer
                             )
 
-        self.fcl1_critic = FullyConectedLayerVars(rng,
-                                constants.cnn_output_size,
-                                constants.fcl1_nbUnit
-                            )
-
-        self.fcl2        = FullyConectedLayerVars(rng,
+        self.fcl2_hold  = FullyConectedLayerVars(rng,
                                 constants.fcl1_nbUnit,
                                 n_sorties,
-                                "fcl2",
-                                True
+                                prefix + "_fcl2",
+                                mean_square_buffer
                             )
 
-        self.fcl2_critic = FullyConectedLayerVars(rng,
-                                constants.fcl1_nbUnit,
-                                n_sorties
-                            )
-    
+    def instantiate(self, inputs, prefix):
+        self.conv1 = ConvLayer(self.conv1_hold, 
+                        inputs,
+                        constants.conv1_shape,
+                        constants.conv1_strides,
+                        prefix + "_" + self.prefix + "_conv1"
+                    )
+
+        self.conv2 = ConvLayer(self.conv2_hold, 
+                        self.conv1.out,
+                        constants.conv2_shape,
+                        constants.conv2_strides,
+                        prefix + "_" + self.prefix + "_conv2"
+                    )
+
+        self.fcl1  = FullyConectedLayer(
+                         self.conv2.out.flatten(ndim=2),
+                         self.fcl1_hold,
+                         T.nnet.relu,
+                         prefix + "_" + self.prefix + "_fcl1"
+                    )
+
+        self.fcl2  = FullyConectedLayer(
+                         self.fcl1.output,
+                         self.fcl2_hold,
+                         None,
+                         prefix + "_" + self.prefix + "_fcl2"
+                    )
+
+        self.layers = [self.conv1, self.conv2, self.fcl1, self.fcl2]
+
     def save(self, filename):
         array_dict = {}
-        for layer in [self.conv1, self.conv2, self.fcl1, self.fcl2]:
+        for layer in [self.conv1_hold, self.conv2_hold, self.fcl1_hold, self.fcl2_hold]:
             name = layer.name
             array_dict[name+"_w"] = layer.npweights()
             array_dict[name+"_b"] = layer.npbiases()
@@ -221,121 +233,66 @@ class DeepQNet:
 
         
 class AgentComputation:
-    def __init__(self, network, prefix):
-        self.network = network
+    def __init__(self, network, critic, prefix):
+        self.inputs = T.dtensor4(name=prefix+"_input")
 
-        self.inputs  = T.dtensor4(name=prefix+"_input")
+        network.instantiate(self.inputs, prefix)
+        critic.instantiate(self.inputs, prefix)
 
-        conv1        = ConvLayer(network.conv1, 
-                        self.inputs,
-                        constants.conv1_shape,
-                        constants.conv1_strides,
-                        prefix+"_conv1"
-                    )
-        conv1_critic = ConvLayer(network.conv1_critic, 
-                        self.inputs,
-                        constants.conv1_shape,
-                        constants.conv1_strides,
-                        prefix + "_conv1_critic"
-                    )
+        critic_updates = []
+        for actor_layer, critic_layer in zip(network.layers, critic.layers):
+            critic_updates.append((critic_layer.W, actor_layer.W))
+            critic_updates.append((critic_layer.b, actor_layer.b))
 
-        conv2        = ConvLayer(network.conv2, 
-                        conv1.out,
-                        constants.conv2_shape,
-                        constants.conv2_strides,
-                        prefix + "_conv2"
-                    )
+        self.update_critic = th.function([],[], updates=critic_updates)
 
-        conv2_critic = ConvLayer(network.conv2_critic, 
-                        conv1_critic.out,
-                        constants.conv2_shape,
-                        constants.conv2_strides,
-                        prefix + "conv2_critic"
-                    )
+        updatable = network.layers
 
-    
-        fcl1         = FullyConectedLayer(
-                                conv2.out.flatten(ndim=2),
-                                network.fcl1,
-                                T.nnet.relu,
-                                prefix + "_fcl1"
-                            )
+        params = []
+        meansquare_params = []
+        for layer in updatable:
+            params            += layer.params
+            meansquare_params += layer.meansquare_param
+        
+        best_actions        = T.argmax(network.fcl2.output)
+        critic_score   = T.max(critic.fcl2.output)
 
-        fcl1_critic  = FullyConectedLayer(
-                                conv2_critic.out.flatten(ndim=2),
-                                network.fcl1_critic,
-                                T.nnet.relu,
-                                prefix + "_fcl1_critic"
-                            )
+        self.getBestAction  = th.function([self.inputs],[best_actions])
+        self.getCriticScore = th.function([self.inputs],[critic_score])
 
-        fcl2         = FullyConectedLayer(
-                                fcl1.output,
-                                network.fcl2,
-                                None,
-                                prefix + "_fcl2"
-                            )
-
-        fcl2_critic  = FullyConectedLayer(
-                                fcl1_critic.output,
-                                network.fcl2_critic,
-                                None,
-                                prefix + "_fcl2_critic"
-                            )
-
-        self.update_critic = function([],[], updates=[
-                    (conv1_critic.W, conv1.W),
-                    (conv1_critic.b, conv1.b),
-                    (conv2_critic.W, conv2.W),
-                    (conv2_critic.b, conv2.b),
-                    (fcl1_critic.W,  fcl1.W),
-                    (fcl1_critic.b,  fcl1.b),
-                    (fcl2_critic.W,  fcl2.W),
-                    (fcl2_critic.b,  fcl2.b)])
-
-        self.updatable = [conv1, conv2, fcl1, fcl2] 
-
-        self.params = []
-        self.meansquare_params = []
-        for layer in self.updatable:
-            self.params            += layer.params
-            self.meansquare_params += layer.meansquare_param
-
-        self.best_actions   = T.argmax(fcl2.output)
-        self.critic_score   = T.max(fcl2_critic.output)
-
+        #Learning inputs
         self.actions = T.ivector(prefix+'_actionsVector');
         self.labels  = T.dvector(prefix+'_labels')
-
-        self.actions_scores = fcl2.output[T.arange(self.actions.shape[0]), self.actions]
-        self.error = T.mean(.5 * (self.actions_scores - self.labels)**2)
-
-        self.gradients  = [T.grad(self.error, param)   for param in self.params] 
-        #The shared "G's" from RMSProp
-
-        self.getBestAction  = function([self.inputs],[self.best_actions])
-        self.getCriticScore = function([self.inputs],[self.critic_score])
-
         self.learning_rate = T.dscalar()
-        self.gradientsAcc = [shared(np.zeros(param.get_value().shape)) for param in self.params]
-        self.clearGradients()
-        accGradUpdates = [(accGradient, accGradient + gradient) \
-                            for accGradient, gradient in zip(self.gradientsAcc, self.gradients)]
 
-        self.cumulateGradient = function([self.inputs, self.actions, self.labels],
+        actions_scores = network.fcl2.output[T.arange(self.actions.shape[0]), self.actions]
+        error = T.mean(.5 * (actions_scores - self.labels)**2)
+
+        gradients  = [T.grad(error, param)   for param in params] 
+
+        self.gradientsAcc = [shared(np.zeros(param.get_value().shape)) for param in params]
+        self.clearGradients()
+
+        accGradUpdates = [(accGradient, accGradient + gradient) \
+                            for accGradient, gradient in zip(self.gradientsAcc, gradients)]
+
+        self.cumulateGradient = th.function([self.inputs, self.actions, self.labels],
                                     [],
                                     updates = accGradUpdates)
 
+        #g <- \alpha g + (1-\alpha) d\theta^2
         meansquare_update = [(ms, constants.decay_factor * ms + (1-constants.decay_factor) * T.sqr(grad))\
-                                for ms, grad in zip(self.meansquare_params, self.gradientsAcc)]
+                                for ms, grad in zip(meansquare_params, self.gradientsAcc)]
 
+        #\theta <- \theta - \etha * d\theta/(g + \epsilon)^(1/2)
         param_update  =  [(param, 
-                          param - self.learning_rate * gradient / T.sqrt(square_mean + constants.epsilon_cancel)) \
-                        for param, gradient, square_mean in zip(self.params, 
+            param - self.learning_rate * gradient / T.sqrt(square_mean + constants.epsilon_cancel)) \
+                        for param, gradient, square_mean in zip(params, 
                                     self.gradientsAcc,
-                                    self.meansquare_params
+                                    meansquare_params
                                 )]
 
-        self.applyGradient = function([self.learning_rate],[],updates = meansquare_update + param_update)
+        self.applyGradient = th.function([self.learning_rate],[],updates = meansquare_update + param_update)
 
 
     def clearGradients(self):

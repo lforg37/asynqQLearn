@@ -21,3 +21,9 @@ class constants:
     batch_size      = 5
     critic_up_freq  = 40000
     epsilon_cancel  = 0.00001
+    
+    
+    lock_T      = True
+    lock_read   = True
+    lock_write  = True
+    lenmoy      = 12

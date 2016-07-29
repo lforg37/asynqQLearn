@@ -4,30 +4,37 @@ from random import random, randrange
 from network import AgentComputation
 import sys
 from improc import NearestNeighboorInterpolator2D
+from utils import LockManager
+
+import os
+import subprocess
 
 import numpy as np
 
-#Return value sampled from logUniform(10-4, 10-2) 
-def logUniform():
-    rnd = random()
-    logsample = -4 + 2*rnd
-    return 10 ** logsample
-    
+def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, init_learning_rate):
 
-def AgentProcess(rwlock, globalNet, T_glob, T_lock, game_path, ident):
+    #Assign processor cores to Agent
+    subprocess.Popen(['taskset', '-c', str(ident), '-p', str(os.getpid())])
+
+    #Set up game environment
     ale = ALEInterface()
     ale.setInt(b'random_seed', randrange(0,256,1))
     ale.loadROM(game_path)
     actions = ale.getMinimalActionSet()
 
-    computation = AgentComputation(globalNet, 'computation_'+str(ident))
+    #Create Agent network based on shared weights wrapped in mainNet and criticNet
+    computation = AgentComputation(mainNet, criticNet, 'computation_'+str(ident))
 
-    init_learning_rate = logUniform()
+    f = open('output_agent_'+str(ident), 'w')
 
-    f = open('output_thread_'+str(ident), 'w')
+    t_lock      = LockManager(T_lock.acquire, T_lock.release, constants.lock_T)
+    writer_lock = LockManager(rwlock.writer_acquire, rwlock.writer_release, constants.lock_write)
+    reader_lock = LockManager(rwlock.reader_acquire, rwlock.reader_release, constants.lock_read)
 
     t = 0
     scores = []
+
+    #Determination of Agent final epsilon-greedyness level
     rnd = random()
     if   rnd < 0.4:
         epsilon_end = 0.1
@@ -37,36 +44,45 @@ def AgentProcess(rwlock, globalNet, T_glob, T_lock, game_path, ident):
         epsilon_end = 0.5
     
     interpolator = NearestNeighboorInterpolator2D([210,160],[84,84])
-    images = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.uint8) 
 
+    images = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.uint8) 
     current_frame = np.empty([210, 160, 1], dtype=np.uint8)
+    
     ale.getScreenGrayscale(current_frame)
 
     state = interpolator.interpolate(current_frame)
 
     score = 0
     
-    with T_lock:
+    with t_lock:
         T = T_glob
         T_glob += 1
 
     while T < constants.nb_max_frames:
         old_state = state
+
+        # Determination of epsilon for the current frame
+        # Epsilon linearlily decrease from one to self.epsilon_end
+        # between frame 0 and frame constants.final_e_frame
         epsilon = epsilon_end
         if T < constants.final_e_frame:
             epsilon = 1 + (epsilon_end - 1) * T / constants.final_e_frame
 
+        #Choosing current action based on epsilon greedy behaviour
         rnd = random()
         if rnd < epsilon:
             action = randrange(0, len(actions))
         else:
-            rwlock.reader_acquire() 
-            action = computation.getBestAction(state.transpose(2,0,1)[np.newaxis])[0]
-            rwlock.reader_release()
+            with reader_lock:
+                action = computation.getBestAction(state.transpose(2,0,1)[np.newaxis])[0]
+
         t += 1
             
         reward = 0
         i      = 0
+
+        #repeating constants.action_repeat times the same action 
+        #and cumulating the rewards 
         while i < constants.action_repeat and not ale.game_over():
             reward += ale.act(actions[action])
             ale.getScreenGrayscale(current_frame)
@@ -76,45 +92,50 @@ def AgentProcess(rwlock, globalNet, T_glob, T_lock, game_path, ident):
         state = np.maximum.reduce(images[0:i], axis=0)
         
         if ale.game_over():
+            #Real Q value is known
             discounted_reward = 0
         else:
-            rwlock.reader_acquire()
-            discounted_reward = computation.getCriticScore(state.transpose(2,0,1)[np.newaxis])[0]
-            rwlock.reader_release()
+            #Computing the estimated Q value of the new state
+            with reader_lock:
+                discounted_reward = computation.getCriticScore(state.transpose(2,0,1)[np.newaxis])[0]
 
         score += reward
+        
+        if reward > 0:
+            reward = 1
+        elif reward < 0:
+            reward = -1
+
         computation.cumulateGradient(
                     np.asarray(old_state.transpose(2,0,1)[np.newaxis]), 
                     np.asarray(action, dtype=np.int32)[np.newaxis], 
                     np.asarray(discounted_reward)[np.newaxis])
 
-        if t % constants.batch_size == 0 or ale.game_over():
+        if t != 0 and (t % constants.batch_size == 0 or ale.game_over()):
+            #computing learning rate for current frame
             lr = init_learning_rate * (1 - T/constants.nb_max_frames)
-            rwlock.writer_acquire()
-            computation.applyGradient(lr)
-            rwlock.writer_release()
+            with writer_lock:
+                computation.applyGradient(lr)
             t = 0
 
         if T % constants.critic_up_freq == 0:
-            f.write("Update critic !\n")
-            f.flush()
-            rwlock.writer_acquire()
-            computation.update_critic()
-            rwlock.writer_release()
+            with writer_lock:
+                computation.update_critic()
             
+        #Log some statistics about played games
         if ale.game_over():
             f.write("["+str(ident)+"] Game ended with score of : "+str(score) + "\n")
-            f.flush()
+            f.write("["+str(ident)+"] T : "+str(T)+"\n")
             ale.reset_game()
             scores.append(score)
-            if len(scores) >= 12:
+            if len(scores) >= constants.lenmoy:
                 moy = sum(scores) / len(scores)
                 f.write("Average scores for last 12 games for thread "+str(ident)+ " : " + str(moy)+"\n")
                 f.flush()
                 scores = []
             score = 0
 
-        with T_lock:
+        with t_lock:
             T = T_glob
             T_glob += 1
 
