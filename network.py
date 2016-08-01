@@ -20,17 +20,8 @@ def prodliste(liste):
 class ConvLayer:
     def __init__(self, convl, inputs, filter_shape, stride, name_prefix):
         self.inputs = inputs
-        self.W = shared(
-                        convl.npweights(),
-                        borrow = True,
-                        name = name_prefix + "_w"
-                    )
-        self.b = shared(
-                        convl.npbiases(),
-                        borrow = True,
-                        name = name_prefix + "_b"
-                    )
-
+        self.W = T.dtensor4()
+        self.b = T.dvector()
 
         conv_out = conv2d(
                     input = inputs,
@@ -47,16 +38,8 @@ class ConvLayer:
         self.meansquare_param = []
 
         if convl.mean_square:
-            self.W_ms = shared(
-                            np.frombuffer(convl.W_ms).reshape(filter_shape),
-                            borrow = True,
-                            name = name_prefix+"_WMS"
-                        )
-            self.b_ms = shared(
-                            np.frombuffer(convl.b_ms),
-                            borrow = True, 
-                            name = name_prefix+"_bMS"
-                        )
+            self.W_ms = T.dtensor4()            
+            self.b_ms = T.dvector() 
             self.meansquare_param = [self.W_ms, self.b_ms]
 
 
@@ -85,6 +68,10 @@ class ConvLayerVars:
             self.b_ms = mp.RawArray(ctypes.c_double, filter_shape[0])
             b_ms = np.frombuffer(self.b_ms)
             b_ms[:] = 1
+
+    def update_weights(self, conv):
+        np.copyto(self.npweights(), conv.npweights())
+        np.copyto(self.npbiases(),  conv.npbiases())
 
     def npweights(self):
         return np.frombuffer(self.W).reshape(self.filter_shape)
@@ -118,6 +105,10 @@ class FullyConectedLayerVars:
             b_ms = np.frombuffer(self.b_ms)
             b_ms[:] = 1
 
+    def update_weights(self, fcl):
+        np.copyto(self.npweights(), fcl.npweights())
+        np.copyto(self.npbiases(),  fcl.npbiases())
+
     def npweights(self):
         return np.frombuffer(self.W).reshape(self.shape)
 
@@ -129,16 +120,8 @@ class FullyConectedLayer:
     def __init__(self, inputs,  fcl, activation, name_prefix):
         self.inputs = inputs
 
-        self.W = shared(
-                        fcl.npweights(),
-                        borrow = True,
-                        name = name_prefix + "_w"
-                    )
-        self.b = shared(
-                        fcl.npbiases(),
-                        borrow = True,
-                        name = name_prefix + "_b"
-                    )
+        self.W = T.dmatrix()
+        self.b = T.dvector()
         
         lin_output = T.dot(inputs, self.W) + self.b
         
@@ -149,16 +132,9 @@ class FullyConectedLayer:
         self.meansquare_param = []
 
         if fcl.mean_square:
-            self.W_ms = shared(
-                            np.frombuffer(fcl.W_ms).reshape(fcl.shape),
-                            borrow = True,
-                            name = name_prefix+"_WMS"
-                        )
-            self.b_ms = shared(
-                            np.frombuffer(fcl.b_ms),
-                            borrow = True, 
-                            name = name_prefix+"_bMS"
-                        )
+            self.W_ms = T.dmatrix()
+            self.b_ms = T.dvector()
+
             self.meansquare_param = [self.W_ms, self.b_ms]
 
 class DeepQNet:
@@ -190,6 +166,18 @@ class DeepQNet:
                                 prefix + "_fcl2",
                                 mean_square_buffer
                             )
+        
+        self.holders = [
+                        self.conv1_hold, 
+                        self.conv2_hold, 
+                        self.fcl1_hold,
+                        self.fcl2_hold
+                       ]
+
+    def update_weights(self, dqn):
+        for local, distant in zip(self.holders, dqn.holders):
+            local.update_weights(distant)
+
 
     def instantiate(self, inputs, prefix):
         self.conv1 = ConvLayer(self.conv1_hold, 
@@ -221,6 +209,9 @@ class DeepQNet:
                     )
 
         self.layers = [self.conv1, self.conv2, self.fcl1, self.fcl2]
+        self.params = []
+        for layer in self.layers:
+            self.params += layer.params
 
     def save(self, filename):
         array_dict = {}
@@ -239,12 +230,8 @@ class AgentComputation:
         network.instantiate(self.inputs, prefix)
         critic.instantiate(self.inputs, prefix)
 
-        critic_updates = []
-        for actor_layer, critic_layer in zip(network.layers, critic.layers):
-            critic_updates.append((critic_layer.W, actor_layer.W))
-            critic_updates.append((critic_layer.b, actor_layer.b))
-
-        self.update_critic = th.function([],[], updates=critic_updates)
+        self.network = network
+        self.critic  = critic
 
         updatable = network.layers
 
@@ -254,10 +241,10 @@ class AgentComputation:
             params            += layer.params
             meansquare_params += layer.meansquare_param
         
-        best_actions        = T.argmax(network.fcl2.output)
+        best_actions   = T.argmax(network.fcl2.output)
         critic_score   = T.max(critic.fcl2.output)
 
-        self.getBestAction  = th.function([self.inputs],[best_actions])
+        self.getBestAction  = th.function([self.inputs] + ,[best_actions])
         self.getCriticScore = th.function([self.inputs],[critic_score])
 
         #Learning inputs
@@ -294,6 +281,8 @@ class AgentComputation:
 
         self.applyGradient = th.function([self.learning_rate],[],updates = meansquare_update + param_update)
 
+    def self.update_critic(self):
+        self.critic.update_weights(self.network)
 
     def clearGradients(self):
         for var in self.gradientsAcc:
