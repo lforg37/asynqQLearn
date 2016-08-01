@@ -34,14 +34,6 @@ class ConvLayer:
         addition = conv_out + self.b.dimshuffle('x', 0, 'x', 'x')
         self.out = T.nnet.relu(addition)
         self.params = [self.W, self.b]
-        
-        self.meansquare_param = []
-
-        if convl.mean_square:
-            self.W_ms = T.dtensor4()            
-            self.b_ms = T.dvector() 
-            self.meansquare_param = [self.W_ms, self.b_ms]
-
 
 class ConvLayerVars:
     def __init__(self, rng, filter_shape, name=None, meansquare = False):
@@ -79,6 +71,11 @@ class ConvLayerVars:
     def npbiases(self):
         return np.frombuffer(self.b)
         
+    def npmsweights(self):
+        return np.frombuffer(self.W_ms).reshape(self.filter_shape) if self.mean_square else None
+
+    def npmsbiases(self):
+        return np.frombuffer(self.b_ms) if self.mean_square else None
 
 class FullyConectedLayerVars:
     def __init__(self, rng, nb_inputs, nb_outputs, name=None, meansquare=False):
@@ -115,6 +112,12 @@ class FullyConectedLayerVars:
     def npbiases(self):
         return np.frombuffer(self.b)
 
+    def npmsweights(self):
+        return np.frombuffer(self.W_ms).reshape(self.shape) if self.mean_square else None
+
+    def npmsbiases(self):
+        return np.frombuffer(self.b_ms) if self.mean_square else None
+
 
 class FullyConectedLayer:
     def __init__(self, inputs,  fcl, activation, name_prefix):
@@ -128,14 +131,6 @@ class FullyConectedLayer:
         self.output = lin_output if activation is None else activation(lin_output)
 
         self.params = [self.W, self.b]
-
-        self.meansquare_param = []
-
-        if fcl.mean_square:
-            self.W_ms = T.dmatrix()
-            self.b_ms = T.dvector()
-
-            self.meansquare_param = [self.W_ms, self.b_ms]
 
 class DeepQNet:
     def __init__(self, n_sorties, prefix, mean_square_buffer):
@@ -174,6 +169,8 @@ class DeepQNet:
                         self.fcl2_hold
                        ]
 
+        self.mean_square = mean_square
+
     def update_weights(self, dqn):
         for local, distant in zip(self.holders, dqn.holders):
             local.update_weights(distant)
@@ -208,10 +205,26 @@ class DeepQNet:
                          prefix + "_" + self.prefix + "_fcl2"
                     )
 
+        self.weight_parameters = []
+        for holder in self.holders:
+            self.weight_parameters += holder.npweights()
+            self.weight_parameters += holder.npbiases()
+
         self.layers = [self.conv1, self.conv2, self.fcl1, self.fcl2]
         self.params = []
         for layer in self.layers:
             self.params += layer.params
+
+        if self.mean_square:
+            self.meansquare_params = []
+            for holder in self.holders:
+                self.meansquare_params += holder.npmsweights()
+                self.meansquare_params += holder.npmsbiases()
+    
+    def wrap_function(self, inputs, outputs):
+        complete_inputs = self.params + inputs
+        f = th.function(complete_inputs, outputs)
+        return lambda x : f(self.weight_parameters + x)
 
     def save(self, filename):
         array_dict = {}
@@ -236,54 +249,51 @@ class AgentComputation:
         updatable = network.layers
 
         params = []
-        meansquare_params = []
         for layer in updatable:
             params            += layer.params
-            meansquare_params += layer.meansquare_param
         
         best_actions   = T.argmax(network.fcl2.output)
         critic_score   = T.max(critic.fcl2.output)
 
-        self.getBestAction  = th.function([self.inputs] + ,[best_actions])
-        self.getCriticScore = th.function([self.inputs],[critic_score])
+        self.getBestAction  = network.wrap_function([self.inputs], [best_actions])
+        self.getCriticScore = network.wrap_function([self.inputs], [critic_score])
 
         #Learning inputs
         self.actions = T.ivector(prefix+'_actionsVector');
         self.labels  = T.dvector(prefix+'_labels')
-        self.learning_rate = T.dscalar()
 
         actions_scores = network.fcl2.output[T.arange(self.actions.shape[0]), self.actions]
         error = T.mean(.5 * (actions_scores - self.labels)**2)
 
         gradients  = [T.grad(error, param)   for param in params] 
 
-        self.gradientsAcc = [shared(np.zeros(param.get_value().shape)) for param in params]
-        self.clearGradients()
+        self.gradientsAcc = [np.zeros(param.shape)) for param in network.weight_parameters]
 
-        accGradUpdates = [(accGradient, accGradient + gradient) \
-                            for accGradient, gradient in zip(self.gradientsAcc, gradients)]
-
-        self.cumulateGradient = th.function([self.inputs, self.actions, self.labels],
-                                    [],
-                                    updates = accGradUpdates)
-
-        #g <- \alpha g + (1-\alpha) d\theta^2
-        meansquare_update = [(ms, constants.decay_factor * ms + (1-constants.decay_factor) * T.sqr(grad))\
-                                for ms, grad in zip(meansquare_params, self.gradientsAcc)]
-
-        #\theta <- \theta - \etha * d\theta/(g + \epsilon)^(1/2)
-        param_update  =  [(param, 
-            param - self.learning_rate * gradient / T.sqrt(square_mean + constants.epsilon_cancel)) \
-                        for param, gradient, square_mean in zip(params, 
-                                    self.gradientsAcc,
-                                    meansquare_params
-                                )]
-
-        self.applyGradient = th.function([self.learning_rate],[],updates = meansquare_update + param_update)
+        self.computeGradient = network.wrap_function([self.inputs, self.actions, self.labels],
+                                    [gradients])
 
     def self.update_critic(self):
         self.critic.update_weights(self.network)
 
-    def clearGradients(self):
-        for var in self.gradientsAcc:
-            var.set_value(np.zeros(var.get_value().shape))
+    def cumulateGradient(self, inputs, actions, labels):
+        gradients = self.computeGradient(inputs, actions, labels)
+        for accumulator, gradient in zip(self.gradientsAcc, gradients):
+            accumulator += gradient
+
+    def applyGradient(self, learning_rate):
+        #Meansquare value of gradient updates
+        for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
+            np.multiply(ms, constants.decay_factor, ms)
+            B = np.sqr(accumulator)
+            np.multiply(B, 1-constants.decay_factor, B)
+            np.add(ms, B, ms)
+
+        #Parameter updates
+        for param, accumulator, ms in zip(  self.network.weight_parameters, 
+                                            self.gradientsAcc, 
+                                            self.network.meansquare_params
+                                         ):
+            G = np.sqrt(ms + epsilon_cancel)  
+            np.divide(accumulator, G, accumulator)
+            np.substract(param, accumulator, param)
+            accumulator.fill(0)
