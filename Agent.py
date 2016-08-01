@@ -50,7 +50,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     
     ale.getScreenGrayscale(current_frame)
 
-    state = interpolator.interpolate(current_frame)
+    state = interpolator.interpolate(current_frame) / 255
 
     score = 0
     
@@ -89,7 +89,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             images[i] = interpolator.interpolate(current_frame)
             i += 1
 
-        state = np.maximum.reduce(images[0:i], axis=0)
+        state = np.maximum.reduce(images[0:i], axis=0) / 255
         
         if ale.game_over():
             #Real Q value is known
@@ -109,16 +109,20 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         computation.cumulateGradient(
                     np.asarray(old_state.transpose(2,0,1)[np.newaxis]), 
                     np.asarray(action, dtype=np.int32)[np.newaxis], 
-                    np.asarray(discounted_reward)[np.newaxis])
+                    np.asarray(discounted_reward)[np.newaxis], ident)
 
         if t != 0 and (t % constants.batch_size == 0 or ale.game_over()):
             #computing learning rate for current frame
             lr = init_learning_rate * (1 - T/constants.nb_max_frames)
             with writer_lock:
                 computation.applyGradient(lr)
+            f.write("ApplyGradient!\n")
+            f.flush()
             t = 0
 
         if T % constants.critic_up_freq == 0:
+            f.write("Update critic !\n")
+            f.flush()
             with writer_lock:
                 computation.update_critic()
             

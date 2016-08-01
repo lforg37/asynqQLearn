@@ -6,6 +6,7 @@ import multiprocessing as mp
 import ctypes
 import pickle
 
+from theano.compile.nanguardmode import NanGuardMode
 import numpy as np
 
 from parameters import constants
@@ -20,8 +21,8 @@ def prodliste(liste):
 class ConvLayer:
     def __init__(self, convl, inputs, filter_shape, stride, name_prefix):
         self.inputs = inputs
-        self.W = T.dtensor4()
-        self.b = T.dvector()
+        self.W = T.dtensor4(name = name_prefix + "_W")
+        self.b = T.dvector(name = name_prefix  + "_b")
 
         conv_out = conv2d(
                     input = inputs,
@@ -42,19 +43,19 @@ class ConvLayerVars:
         self.W = mp.RawArray(ctypes.c_double, prodliste(filter_shape))
 
         w = np.frombuffer(self.W).reshape(filter_shape)
-        np.copyto(w, np.asarray(rng.normal(size=filter_shape)))
+        np.copyto(w, np.asarray(rng.normal(size=filter_shape, scale=constants.weigthInitStdev)))
         
         self.b = mp.RawArray(ctypes.c_double, filter_shape[0])
         
         b = np.frombuffer(self.b)
-        b[:] = 0.01
+        b[:] = 1
 
         self.filter_shape = filter_shape
 
         self.mean_square = meansquare 
         if meansquare:
             self.W_ms  = mp.RawArray(ctypes.c_double, prodliste(filter_shape))
-            w_ms = np.frombuffer(self.W)
+            w_ms = np.frombuffer(self.W_ms)
             w_ms[:] = 1
 
             self.b_ms = mp.RawArray(ctypes.c_double, filter_shape[0])
@@ -84,18 +85,18 @@ class FullyConectedLayerVars:
         self.W     = mp.RawArray(ctypes.c_double, nb_inputs * nb_outputs)
 
         w = np.frombuffer(self.W).reshape(self.shape)
-        np.copyto(w, np.asarray(rng.normal(size=self.shape)))
+        np.copyto(w, np.asarray(rng.normal(size=self.shape, scale=constants.weigthInitStdev)))
 
         self.b    = mp.RawArray(ctypes.c_double, nb_outputs)
 
         b = np.frombuffer(self.b)
-        b[:] = 0.01
+        b[:] = 1
 
         self.mean_square = meansquare
 
         if meansquare:
             self.W_ms  = mp.RawArray(ctypes.c_double, nb_inputs * nb_outputs)
-            w_ms = np.frombuffer(self.W)
+            w_ms = np.frombuffer(self.W_ms)
             w_ms[:] = 1
 
             self.b_ms = mp.RawArray(ctypes.c_double, nb_outputs)
@@ -123,8 +124,8 @@ class FullyConectedLayer:
     def __init__(self, inputs,  fcl, activation, name_prefix):
         self.inputs = inputs
 
-        self.W = T.dmatrix()
-        self.b = T.dvector()
+        self.W = T.dmatrix(name = name_prefix + "_W")
+        self.b = T.dvector(name = name_prefix + "_b")
         
         lin_output = T.dot(inputs, self.W) + self.b
         
@@ -161,6 +162,8 @@ class DeepQNet:
                                 prefix + "_fcl2",
                                 mean_square_buffer
                             )
+
+        print(self.fcl2_hold.npweights())
         
         self.holders = [
                         self.conv1_hold, 
@@ -169,7 +172,7 @@ class DeepQNet:
                         self.fcl2_hold
                        ]
 
-        self.mean_square = mean_square
+        self.mean_square = mean_square_buffer
 
     def update_weights(self, dqn):
         for local, distant in zip(self.holders, dqn.holders):
@@ -207,8 +210,8 @@ class DeepQNet:
 
         self.weight_parameters = []
         for holder in self.holders:
-            self.weight_parameters += holder.npweights()
-            self.weight_parameters += holder.npbiases()
+            self.weight_parameters.append(holder.npweights())
+            self.weight_parameters.append(holder.npbiases())
 
         self.layers = [self.conv1, self.conv2, self.fcl1, self.fcl2]
         self.params = []
@@ -218,14 +221,9 @@ class DeepQNet:
         if self.mean_square:
             self.meansquare_params = []
             for holder in self.holders:
-                self.meansquare_params += holder.npmsweights()
-                self.meansquare_params += holder.npmsbiases()
+                self.meansquare_params.append(holder.npmsweights())
+                self.meansquare_params.append(holder.npmsbiases())
     
-    def wrap_function(self, inputs, outputs):
-        complete_inputs = self.params + inputs
-        f = th.function(complete_inputs, outputs)
-        return lambda x : f(self.weight_parameters + x)
-
     def save(self, filename):
         array_dict = {}
         for layer in [self.conv1_hold, self.conv2_hold, self.fcl1_hold, self.fcl2_hold]:
@@ -245,18 +243,25 @@ class AgentComputation:
 
         self.network = network
         self.critic  = critic
+        self.n = 0
 
         updatable = network.layers
 
         params = []
         for layer in updatable:
-            params            += layer.params
+            params    += layer.params
         
         best_actions   = T.argmax(network.fcl2.output)
         critic_score   = T.max(critic.fcl2.output)
+        
+        inputsWithNet = params + [self.inputs]
 
-        self.getBestAction  = network.wrap_function([self.inputs], [best_actions])
-        self.getCriticScore = network.wrap_function([self.inputs], [critic_score])
+        self._getBestAction = th.function(inputsWithNet, 
+                                    [best_actions], 
+                                    name="getBestAction")
+
+        inputsWithCritic = critic.params + [self.inputs]
+        self._getCriticScore = th.function(inputsWithCritic, [critic_score], name = "getCriticScore")
 
         #Learning inputs
         self.actions = T.ivector(prefix+'_actionsVector');
@@ -267,24 +272,32 @@ class AgentComputation:
 
         gradients  = [T.grad(error, param)   for param in params] 
 
-        self.gradientsAcc = [np.zeros(param.shape)) for param in network.weight_parameters]
+        self.gradientsAcc  = [np.zeros(param.shape) for param in network.weight_parameters]
 
-        self.computeGradient = network.wrap_function([self.inputs, self.actions, self.labels],
-                                    [gradients])
+        inputsWithNet = params + [self.inputs, self.actions, self.labels]
+        self._computeGradient = th.function(inputsWithNet, gradients, name = "computeGradients")
 
-    def self.update_critic(self):
+    def update_critic(self):
         self.critic.update_weights(self.network)
 
-    def cumulateGradient(self, inputs, actions, labels):
-        gradients = self.computeGradient(inputs, actions, labels)
+    def cumulateGradient(self, inputs, actions, labels, ident):
+        print("LABEL : ", labels, " ", ident)
+        gradients = self._computeGradient(*self.network.weight_parameters, inputs, actions, labels)
         for accumulator, gradient in zip(self.gradientsAcc, gradients):
             accumulator += gradient
+        self.n += 1
+
+    def getBestAction(self, inputs):
+        return self._getBestAction(*self.network.weight_parameters, inputs)
+
+    def getCriticScore(self, inputs):
+        return self._getCriticScore(*self.critic.weight_parameters, inputs)
 
     def applyGradient(self, learning_rate):
         #Meansquare value of gradient updates
         for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
             np.multiply(ms, constants.decay_factor, ms)
-            B = np.sqr(accumulator)
+            B = np.square(accumulator)
             np.multiply(B, 1-constants.decay_factor, B)
             np.add(ms, B, ms)
 
@@ -293,7 +306,9 @@ class AgentComputation:
                                             self.gradientsAcc, 
                                             self.network.meansquare_params
                                          ):
-            G = np.sqrt(ms + epsilon_cancel)  
+            G = np.sqrt(ms + constants.epsilon_cancel)  
+            np.multiply(G, self.n, G)
             np.divide(accumulator, G, accumulator)
-            np.substract(param, accumulator, param)
+            np.subtract(param, accumulator, param)
             accumulator.fill(0)
+            self.n = 0
