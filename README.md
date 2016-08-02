@@ -10,32 +10,19 @@ Theano and Arcade-Learning-Environement
 ## Installation
 * Theano:
 	[website](http://deeplearning.net/software/theano/install.html)
-
-	$ pip install theano
+    pip install theano
  
 * Arcade learning environment :
 
-	$ git clone https://github.com/mgbellemare/Arcade-Learning-Environment
-
-	$ cd Arcade-Learning-Environment
-
-	$ cmake -DUSE_SDL=ON -DUSE_RLGLUE=OFF -DBUILD_EXAMPLES=OFF .
-
-	$ make -j N (N depends on your PC)
-
-	$ pip install .
+    git clone https://github.com/mgbellemare/Arcade-Learning-Environment
+    cd Arcade-Learning-Environment
+    mkdir buid
+    cd build
+    cmake -DUSE_SDL=OFF -DUSE_RLGLUE=OFF -DBUILD_EXAMPLES=OFF ..
+    make
+    cd ..
+    pip install .
 
 
 ## Running
-
-*TODO*
-
-## API Documentation
-
-*TODO*
-
-## Releasing
-
- *TODO*
-
-## Run Tests
+    python trainAgent.py breakout.bin
