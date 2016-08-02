@@ -16,15 +16,15 @@ class constants:
     action_repeat    = 4
     discount_factor  = 0.99
     decay_factor     = 0.95
-    nb_agent         = 2
+    nb_agent         = 16
     nb_max_frames    = 80000000
     batch_size       = 5
     critic_up_freq   = 40000
-    epsilon_cancel   = 0.1
-    weigthInitStdev  = 0.1
+    epsilon_cancel   = 0.0001
+    weigthInitStdev  = 0.25
     
     
     lock_T      = True
-    lock_read   = True
-    lock_write  = True
+    lock_read   = False
+    lock_write  = False
     lenmoy      = 12

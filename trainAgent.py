@@ -27,7 +27,7 @@ def main():
     agentpool = []
     
     T = mp.RawValue(ctypes.c_uint)
-    T = 0
+    T.value = 0
     TLock = mp.Lock()
 
     learning_rate = logUniform(-4, -2)

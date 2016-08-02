@@ -5,6 +5,7 @@ from theano import shared
 import multiprocessing as mp
 import ctypes
 import pickle
+import time
 
 from theano.compile.nanguardmode import NanGuardMode
 import numpy as np
@@ -163,7 +164,6 @@ class DeepQNet:
                                 mean_square_buffer
                             )
 
-        print(self.fcl2_hold.npweights())
         
         self.holders = [
                         self.conv1_hold, 
@@ -281,7 +281,6 @@ class AgentComputation:
         self.critic.update_weights(self.network)
 
     def cumulateGradient(self, inputs, actions, labels, ident):
-        print("LABEL : ", labels, " ", ident)
         gradients = self._computeGradient(*self.network.weight_parameters, inputs, actions, labels)
         for accumulator, gradient in zip(self.gradientsAcc, gradients):
             accumulator += gradient
@@ -294,6 +293,8 @@ class AgentComputation:
         return self._getCriticScore(*self.critic.weight_parameters, inputs)
 
     def applyGradient(self, learning_rate):
+        if self.n == 0:
+            return
         #Meansquare value of gradient updates
         for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
             np.multiply(ms, constants.decay_factor, ms)
@@ -311,4 +312,4 @@ class AgentComputation:
             np.divide(accumulator, G, accumulator)
             np.subtract(param, accumulator, param)
             accumulator.fill(0)
-            self.n = 0
+        self.n = 0

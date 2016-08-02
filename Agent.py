@@ -7,14 +7,13 @@ from improc import NearestNeighboorInterpolator2D
 from utils import LockManager
 
 import os
-import subprocess
 
 import numpy as np
 
 def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, init_learning_rate):
 
     #Assign processor cores to Agent
-    subprocess.Popen(['taskset', '-c', str(ident), '-p', str(os.getpid())])
+    os.system('taskset -p -c ' + str(2*ident) + ','+str(2*ident+1)+' ' + str(os.getpid()))
 
     #Set up game environment
     ale = ALEInterface()
@@ -55,8 +54,8 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     score = 0
     
     with t_lock:
-        T = T_glob
-        T_glob += 1
+        T = T_glob.value
+        T_glob.value += 1
 
     while T < constants.nb_max_frames:
         old_state = state
@@ -116,8 +115,6 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             lr = init_learning_rate * (1 - T/constants.nb_max_frames)
             with writer_lock:
                 computation.applyGradient(lr)
-            f.write("ApplyGradient!\n")
-            f.flush()
             t = 0
 
         if T % constants.critic_up_freq == 0:
@@ -140,6 +137,6 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             score = 0
 
         with t_lock:
-            T = T_glob
-            T_glob += 1
+            T = T_glob.value
+            T_glob.value += 1
 
