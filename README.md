@@ -14,14 +14,15 @@ Theano and Arcade-Learning-Environement
  
 * Arcade learning environment :
 
-    git clone https://github.com/mgbellemare/Arcade-Learning-Environment
-    cd Arcade-Learning-Environment
-    mkdir buid
-    cd build
-    cmake -DUSE_SDL=OFF -DUSE_RLGLUE=OFF -DBUILD_EXAMPLES=OFF ..
-    make
-    cd ..
-    pip install .
+```
+git clone https://github.com/mgbellemare/Arcade-Learning-Environment
+cd Arcade-Learning-Environment
+mkdir buid
+cd build
+cmake -DUSE_SDL=OFF -DUSE_RLGLUE=OFF -DBUILD_EXAMPLES=OFF ..
+make
+pip install ..
+```
 
 
 ## Running
