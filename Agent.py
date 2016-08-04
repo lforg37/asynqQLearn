@@ -49,7 +49,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     
     ale.getScreenGrayscale(current_frame)
 
-    state = interpolator.interpolate(current_frame) / 255
+    new_state = interpolator.interpolate(current_frame) / 255
 
     score = 0
     
@@ -58,7 +58,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         T_glob.value += 1
 
     while T < constants.nb_max_frames:
-        old_state = state
+        state = new_state
 
         # Determination of epsilon for the current frame
         # Epsilon linearlily decrease from one to self.epsilon_end
@@ -73,6 +73,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             action = randrange(0, len(actions))
         else:
             with reader_lock:
+#?????????????? state -> old_state
                 action = computation.getBestAction(state.transpose(2,0,1)[np.newaxis])[0]
 
         t += 1
@@ -82,31 +83,31 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
 
         #repeating constants.action_repeat times the same action 
         #and cumulating the rewards 
+#?????????????? 
         while i < constants.action_repeat and not ale.game_over():
             reward += ale.act(actions[action])
             ale.getScreenGrayscale(current_frame)
             images[i] = interpolator.interpolate(current_frame)
             i += 1
 
-        state = np.maximum.reduce(images[0:i], axis=0) / 255
+        new_state = np.maximum.reduce(images[0:i], axis=0) / 255
         
-        if ale.game_over():
-            #Real Q value is known
-            discounted_reward = 0
-        else:
-            #Computing the estimated Q value of the new state
-            with reader_lock:
-                discounted_reward = computation.getCriticScore(state.transpose(2,0,1)[np.newaxis])[0]
-
         score += reward
         
+        discounted_reward = 0
+
         if reward > 0:
-            reward = 1
+            discounted_reward =  1
         elif reward < 0:
-            reward = -1
+            discounted_reward = -1
+
+        if not ale.game_over():
+            with reader_lock:
+                discounted_reward += constants.discount_factor * computation.getCriticScore(new_state.transpose(2,0,1)[np.newaxis])[0]
+
 
         computation.cumulateGradient(
-                    np.asarray(old_state.transpose(2,0,1)[np.newaxis]), 
+                    np.asarray(state.transpose(2,0,1)[np.newaxis]), 
                     np.asarray(action, dtype=np.int32)[np.newaxis], 
                     np.asarray(discounted_reward)[np.newaxis], ident)
 
