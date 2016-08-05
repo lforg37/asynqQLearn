@@ -9,12 +9,12 @@ import multiprocessing as mp
 import ctypes
 
 
-def main(argv):
-    if len(argv) < 2:
+def main():
+    if len(sys.argv) < 2:
         print("Missing rom name !")
         return
-    print("Tout est ok")    
-    romname = argv[1].encode('ascii')
+    
+    romname = sys.argv[1].encode('ascii')
     ale = ALEInterface()
     ale.loadROM(romname)
     nb_actions = len(ale.getMinimalActionSet()) 
@@ -45,4 +45,4 @@ def main(argv):
 
 if __name__ == "__main__":
     mp.set_start_method('spawn')
-    main(sys.argv)
+    main()
