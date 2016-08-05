@@ -308,12 +308,13 @@ class AgentComputation:
                                             self.gradientsAcc, 
                                             self.network.meansquare_params
                                          ):
-            print(i, "Before : ", str(np.sum(param)))
+            #print(i, "Before : ", str(np.sum(param)))
             G = np.sqrt(ms + constants.epsilon_cancel)  
             np.multiply(G, self.n, G)
             np.divide(accumulator, G, accumulator)
+            np.multiply(accumulator, learning_rate, accumulator)
             np.subtract(param, accumulator, param)
             accumulator.fill(0)
-            print(i, "After : ", str(np.sum(param)))
+            #print(i, "After : ", str(np.sum(param)))
             i+=1
         self.n = 0
