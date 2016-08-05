@@ -10,7 +10,7 @@ import os
 
 import numpy as np
 
-def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, init_learning_rate):
+def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, init_learning_rate, barrier):
 
     #Assign processor cores to Agent
     os.system('taskset -p -c ' + str(2*ident) + ','+str(2*ident+1)+' ' + str(os.getpid()))
@@ -18,13 +18,14 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     #Set up game environment
     ale = ALEInterface()
     ale.setInt(b'random_seed', randrange(0,256,1))
+    #ale.setBool(b'display_screen', True)
     ale.loadROM(game_path)
     actions = ale.getMinimalActionSet()
 
     #Create Agent network based on shared weights wrapped in mainNet and criticNet
     computation = AgentComputation(mainNet, criticNet, 'computation_'+str(ident))
 
-    f = open('output_agent_'+str(ident), 'w')
+    f = open(constants.filebase+str(ident), 'w')
 
     t_lock      = LockManager(T_lock.acquire, T_lock.release, constants.lock_T)
     writer_lock = LockManager(rwlock.writer_acquire, rwlock.writer_release, constants.lock_write)
@@ -57,6 +58,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         T = T_glob.value
         T_glob.value += 1
 
+    barrier.wait()
     while T < constants.nb_max_frames:
         old_state = state
 
@@ -89,21 +91,20 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             i += 1
 
         state = np.maximum.reduce(images[0:i], axis=0) / 255
-        
-        if ale.game_over():
-            #Real Q value is known
-            discounted_reward = 0
-        else:
-            #Computing the estimated Q value of the new state
-            with reader_lock:
-                discounted_reward = computation.getCriticScore(state.transpose(2,0,1)[np.newaxis])[0]
 
         score += reward
         
-        if reward > 0:
-            reward = 1
+        discounted_reward = 0
+        if   reward > 0:
+            discounted_reward = 1
         elif reward < 0:
-            reward = -1
+            discounted_reward = -1
+
+
+        if not ale.game_over():
+            #Computing the estimated Q value of the new state
+            with reader_lock:
+                discounted_reward += constants.discount_factor * computation.getCriticScore(state.transpose(2,0,1)[np.newaxis])[0]
 
         computation.cumulateGradient(
                     np.asarray(old_state.transpose(2,0,1)[np.newaxis]), 
@@ -112,7 +113,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
 
         if t != 0 and (t % constants.batch_size == 0 or ale.game_over()):
             #computing learning rate for current frame
-            lr = init_learning_rate * (1 - T/constants.nb_max_frames)
+            lr = init_learning_rate# * (1 - T/constants.nb_max_frames)
             with writer_lock:
                 computation.applyGradient(lr)
             t = 0
@@ -131,7 +132,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             scores.append(score)
             if len(scores) >= constants.lenmoy:
                 moy = sum(scores) / len(scores)
-                f.write("Average scores for last 12 games for thread "+str(ident)+ " : " + str(moy)+"\n")
+                f.write("Average scores for last 12 games for Agent "+str(ident)+ " : " + str(moy)+"\n")
                 f.flush()
                 scores = []
             score = 0

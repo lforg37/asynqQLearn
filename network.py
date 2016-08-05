@@ -303,13 +303,17 @@ class AgentComputation:
             np.add(ms, B, ms)
 
         #Parameter updates
+        i = 0
         for param, accumulator, ms in zip(  self.network.weight_parameters, 
                                             self.gradientsAcc, 
                                             self.network.meansquare_params
                                          ):
+            print(i, "Before : ", str(np.sum(param)))
             G = np.sqrt(ms + constants.epsilon_cancel)  
             np.multiply(G, self.n, G)
             np.divide(accumulator, G, accumulator)
             np.subtract(param, accumulator, param)
             accumulator.fill(0)
+            print(i, "After : ", str(np.sum(param)))
+            i+=1
         self.n = 0
