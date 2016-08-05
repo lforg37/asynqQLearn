@@ -3,8 +3,8 @@ def emptyfunc():
 
 class LockManager:
     def __init__(self, lockfunc, releasefunc, NeedsLock = True):
-        self.__enter = emptyfunc if not NeedsLock else lockfunc
-        self.__exit  = emptyfunc if not NeedsLock else releasefunc
+        self.__enter = lockfunc    if NeedsLock else emptyfunc
+        self.__exit  = releasefunc if NeedsLock else emptyfunc
 
     def __exit__(self, e_type, e_value, traceback):
         self.__exit()

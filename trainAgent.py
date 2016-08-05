@@ -30,10 +30,11 @@ def main():
     T.value = 0
     TLock = mp.Lock()
 
-    learning_rate = logUniform(-4, -2)
-
+    learning_rate = 10**-2.3
+    
+    barrier = mp.Barrier(constants.nb_agent) 
     for i in range(0, constants.nb_agent):
-        agentpool.append(mp.Process(target = AgentProcess, args=[rwlock, dqn, dqn_critic, T, TLock, romname, i, learning_rate]))
+        agentpool.append(mp.Process(target = AgentProcess, args=[rwlock, dqn, dqn_critic, T, TLock, romname, i, learning_rate, barrier]))
     
     for t in agentpool:
         t.start()
