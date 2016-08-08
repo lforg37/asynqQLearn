@@ -53,6 +53,9 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     state = interpolator.interpolate(current_frame) / 255.0
 
     score = 0
+
+    if ident == 0:
+        computation.initialisedRMSVals = False
     
     with t_lock:
         T = T_glob.value
@@ -90,7 +93,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             images[i] = interpolator.interpolate(current_frame)
             i += 1
 
-        state = np.maximum.reduce(images[0:i], axis=0) / 255
+        state = np.maximum.reduce(images[0:i], axis=0) / 255.0
 
         score += reward
         

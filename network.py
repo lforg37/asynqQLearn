@@ -245,6 +245,8 @@ class AgentComputation:
         self.critic  = critic
         self.n = 0
 
+        self.initialisedRMSVals = True
+
         updatable = network.layers
 
         params = []
@@ -296,14 +298,20 @@ class AgentComputation:
         if self.n == 0:
             return
         #Meansquare value of gradient updates
-        for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
-            np.multiply(ms, constants.decay_factor, ms)
-            B = np.square(accumulator)
-            np.multiply(B, 1-constants.decay_factor, B)
-            np.add(ms, B, ms)
+        if self.initialisedRMSVals:
+            for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
+                np.multiply(ms, constants.decay_factor, ms)
+                B = np.square(accumulator)
+                np.multiply(B, 1-constants.decay_factor, B)
+                np.add(ms, B, ms)
+        else :
+            self.initialisedRMSVals = True
+            for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
+                np.copyto(ms, accumulator / self.n)
+            
 
         #Parameter updates
-        i = 0
+        #i = 0
         for param, accumulator, ms in zip(  self.network.weight_parameters, 
                                             self.gradientsAcc, 
                                             self.network.meansquare_params
@@ -316,5 +324,5 @@ class AgentComputation:
             np.subtract(param, accumulator, param)
             accumulator.fill(0)
             #print(i, "After : ", str(np.sum(param)))
-            i+=1
+            #i+=1
         self.n = 0

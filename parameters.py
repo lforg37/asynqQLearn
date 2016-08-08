@@ -15,7 +15,7 @@ class constants:
     final_e_frame    = 4000000
     action_repeat    = 4
     discount_factor  = 0.99
-    decay_factor     = 0.95
+    decay_factor     = 0.99
     nb_agent         = 2
     nb_max_frames    = 80000000
     batch_size       = 5
