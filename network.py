@@ -142,6 +142,7 @@ class DeepQNet:
     def __init__(self, n_sorties, prefix, mean_square_buffer):
         rng = np.random.RandomState(42)
         self.prefix = prefix
+        self.mutex = mp.Lock()
         self.conv1_hold = ConvLayerVars(rng, 
                                 constants.conv1_shape,
                                 prefix +"_conv1",
@@ -264,12 +265,14 @@ class AgentComputation:
         
         inputsWithNet = params + [self.inputs]
 
-        self._getBestAction = th.function(inputsWithNet, 
+        with network.mutex:
+            self._getBestAction = th.function(inputsWithNet, 
                                     [best_actions], 
                                     name="getBestAction")
 
         inputsWithCritic = critic.params + [self.inputs]
-        self._getCriticScore = th.function(inputsWithCritic, [critic_score], name = "getCriticScore")
+        with network.mutex:
+            self._getCriticScore = th.function(inputsWithCritic, [critic_score], name = "getCriticScore")
 
         #Learning inputs
         self.actions = T.ivector(prefix+'_actionsVector');
@@ -283,7 +286,8 @@ class AgentComputation:
         self.gradientsAcc  = [np.zeros(param.shape) for param in network.weight_parameters]
 
         inputsWithNet = params + [self.inputs, self.actions, self.labels]
-        self._computeGradient = th.function(inputsWithNet, gradients, name = "computeGradients")
+        with network.mutex:
+            self._computeGradient = th.function(inputsWithNet, gradients, name = "computeGradients")
 
     def update_critic(self):
         self.critic.update_weights(self.network)
