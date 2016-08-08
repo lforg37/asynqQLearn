@@ -13,8 +13,7 @@ import numpy as np
 def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, init_learning_rate, barrier):
 
     #Assign processor cores to Agent
-    os.system('taskset -p -c ' + str(2*ident) + ','+str(2*ident+1)+' ' + str(os.getpid()))
-    theano.config.device = 'cpu'
+    os.system('taskset -p -c ' + str(ident) + ' ' + str(os.getpid()))
 
     #Set up game environment
     ale = ALEInterface()
