@@ -1,10 +1,10 @@
 from parameters import constants
 from ale_python_interface import ALEInterface
 from random import random, randrange
-from network import AgentComputation
 import sys
 from improc import NearestNeighboorInterpolator2D
 from utils import LockManager
+from network import AgentComputation
 
 import os
 
@@ -19,6 +19,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     ale = ALEInterface()
     ale.setInt(b'random_seed', randrange(0,256,1))
     #ale.setBool(b'display_screen', True)
+    ale.setBool(b'color_averaging', True)
     ale.loadROM(game_path)
     actions = ale.getMinimalActionSet()
 
@@ -49,8 +50,8 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     current_frame = np.empty([210, 160, 1], dtype=np.uint8)
     
     ale.getScreenGrayscale(current_frame)
-
-    state = interpolator.interpolate(current_frame) / 255.0
+    state    = np.empty([constants.action_repeat, 84, 84, 1])
+    state[:] = interpolator.interpolate(current_frame) / 255.0
 
     score = 0
 
@@ -78,11 +79,12 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             action = randrange(0, len(actions))
         else:
             with reader_lock:
-                action = computation.getBestAction(state.transpose(2,0,1)[np.newaxis])[0]
+                action = computation.getBestAction(state.transpose(0,3,1,2))[0]
 
         t += 1
             
         reward = 0
+
         i      = 0
 
         #repeating constants.action_repeat times the same action 
@@ -90,10 +92,12 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         while i < constants.action_repeat and not ale.game_over():
             reward += ale.act(actions[action])
             ale.getScreenGrayscale(current_frame)
-            images[i] = interpolator.interpolate(current_frame)
+            state[i] = interpolator.interpolate(current_frame) / 255.0
             i += 1
 
-        state = np.maximum.reduce(images[0:i], axis=0) / 255.0
+        while i < constants.action_repeat:
+            state[i] = state[i-1]
+        #state = np.maximum.reduce(images[0:i], axis=0) / 255.0
 
         score += reward
         
@@ -107,10 +111,10 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         if not ale.game_over():
             #Computing the estimated Q value of the new state
             with reader_lock:
-                discounted_reward += constants.discount_factor * computation.getCriticScore(state.transpose(2,0,1)[np.newaxis])[0]
+                discounted_reward += constants.discount_factor * computation.getCriticScore(state.transpose(0,3,1,2))[0]
 
         computation.cumulateGradient(
-                    np.asarray(old_state.transpose(2,0,1)[np.newaxis]), 
+                    np.asarray(old_state.transpose(0,3,1,2)), 
                     np.asarray(action, dtype=np.int32)[np.newaxis], 
                     np.asarray(discounted_reward)[np.newaxis], ident)
 

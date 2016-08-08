@@ -1,3 +1,6 @@
+import os
+os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
+
 import theano as th
 from theano import tensor as T
 from theano.tensor.nnet import conv2d
@@ -20,13 +23,14 @@ def prodliste(liste):
     return prod
 
 class ConvLayer:
-    def __init__(self, convl, inputs, filter_shape, stride, name_prefix):
+    def __init__(self, convl, inputs, filter_shape, stride, name_prefix, input_shape):
         self.inputs = inputs
         self.W = T.dtensor4(name = name_prefix + "_W")
         self.b = T.dvector(name = name_prefix  + "_b")
 
         conv_out = conv2d(
                     input = inputs,
+                    input_shape  = input_shape,
                     filters      = self.W,
                     filter_shape = filter_shape,
                     subsample    = stride
@@ -184,14 +188,16 @@ class DeepQNet:
                         inputs,
                         constants.conv1_shape,
                         constants.conv1_strides,
-                        prefix + "_" + self.prefix + "_conv1"
+                        prefix + "_" + self.prefix + "_conv1",
+                        constants.image_shape
                     )
 
         self.conv2 = ConvLayer(self.conv2_hold, 
                         self.conv1.out,
                         constants.conv2_shape,
                         constants.conv2_strides,
-                        prefix + "_" + self.prefix + "_conv2"
+                        prefix + "_" + self.prefix + "_conv2",
+                        None
                     )
 
         self.fcl1  = FullyConectedLayer(

@@ -2,7 +2,7 @@ class constants:
     input_frames     = 4
     input_size       = 84*84
     conv1_nbfilt     = 32
-    image_shape      = [None, 1, 84, 84,]
+    image_shape      = [4, 1, 84, 84,]
     conv1_shape      = (16,1,8, 8)
     conv1_zwidth     = 16
     conv1_strides    = (4, 4)
@@ -16,7 +16,7 @@ class constants:
     action_repeat    = 4
     discount_factor  = 0.99
     decay_factor     = 0.99
-    nb_agent         = 2
+    nb_agent         = 1
     nb_max_frames    = 80000000
     batch_size       = 5
     critic_up_freq   = 40000
