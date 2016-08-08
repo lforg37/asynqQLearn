@@ -14,6 +14,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
 
     #Assign processor cores to Agent
     os.system('taskset -p -c ' + str(2*ident) + ','+str(2*ident+1)+' ' + str(os.getpid()))
+    theano.config.device = 'cpu'
 
     #Set up game environment
     ale = ALEInterface()
