@@ -97,6 +97,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
 
         while i < constants.action_repeat:
             state[i] = state[i-1]
+            i += 1
         #state = np.maximum.reduce(images[0:i], axis=0) / 255.0
 
         score += reward
