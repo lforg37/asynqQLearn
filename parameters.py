@@ -20,7 +20,7 @@ class constants:
     nb_max_frames    = 80000000
     batch_size       = 5
     critic_up_freq   = 40000
-    epsilon_cancel   = 0.0001
+    epsilon_cancel   = 0.1
     weigthInitStdev  = 0.25
 
     filebase = 'output_agent_'

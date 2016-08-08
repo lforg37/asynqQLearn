@@ -50,7 +50,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     
     ale.getScreenGrayscale(current_frame)
 
-    state = interpolator.interpolate(current_frame) / 255
+    state = interpolator.interpolate(current_frame) / 255.0
 
     score = 0
     
