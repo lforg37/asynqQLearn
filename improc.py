@@ -25,10 +25,11 @@ class NearestNeighboorInterpolator2D:
             x1 =  np.ceil(coord_old_space_x)
             xold = x0 if coord_old_space_x - x0 <= x1 - coord_old_space_x else x1
             self.x_array[x] = xold
-    
-    def interpolate(self, source):
-        return source[self.y_array][:,self.x_array][:]
 
+    def interpolate(self, source, buf = None):
+        if buf is None:
+            return source[self.y_array][:,self.x_array][:] / 255
+        np.divide(source[self.y_array][:,self.x_array][:], 255.0, buf)
 
 
 class BilinearInterpolator2D:

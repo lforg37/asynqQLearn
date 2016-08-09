@@ -5,6 +5,7 @@ import sys
 from improc import NearestNeighboorInterpolator2D
 from utils import LockManager
 from network import AgentComputation
+#from PIL import Image
 
 import os
 
@@ -46,12 +47,18 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     
     interpolator = NearestNeighboorInterpolator2D([210,160],[84,84])
 
-    images = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.uint8) 
+    images = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.float32) 
     current_frame = np.empty([210, 160, 1], dtype=np.uint8)
-    
     ale.getScreenGrayscale(current_frame)
-    state    = np.empty([constants.action_repeat, 84, 84, 1])
-    state[:] = interpolator.interpolate(current_frame) / 255.0
+    
+    
+    #Image.fromarray(current_frame.squeeze(),  mode='L').save('curframe.png')
+    
+    state    = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.float32)
+    #Image.fromarray(state[0].squeeze(), mode='L').save('prevgetcurframe.png')
+    interpolator.interpolate(current_frame, state[0])
+    state[1:4] = state[0]
+    #Image.fromarray((state[0].squeeze()*255).astype(np.uint8), mode='L').save('getcurframe.png')
 
     score = 0
 
@@ -92,12 +99,17 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         while i < constants.action_repeat and not ale.game_over():
             reward += ale.act(actions[action])
             ale.getScreenGrayscale(current_frame)
-            state[i] = interpolator.interpolate(current_frame) / 255.0
+            interpolator.interpolate(current_frame, state[i])
             i += 1
 
         while i < constants.action_repeat:
             state[i] = state[i-1]
             i += 1
+
+        #for i in range(constants.action_repeat):
+        #    im = Image.fromarray((state[i].squeeze()*255).astype(np.uint8), mode='L')
+        #    im.save(constants.filebase+str(ident)+'_image_'+'{:08d}'.format(T)+'_'+str(i)+'.png')
+
         #state = np.maximum.reduce(images[0:i], axis=0) / 255.0
 
         score += reward
