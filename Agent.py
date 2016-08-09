@@ -70,6 +70,8 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         T_glob.value += 1
 
     barrier.wait()
+    f.write("After the barrier !")
+    f.flush()
     while T < constants.nb_max_frames:
         old_state = state
 
