@@ -74,6 +74,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     f.flush()
     while T < constants.nb_max_frames:
         old_state = state
+        state     = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.float32)
 
         # Determination of epsilon for the current frame
         # Epsilon linearlily decrease from one to self.epsilon_end
