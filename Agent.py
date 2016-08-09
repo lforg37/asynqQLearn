@@ -152,6 +152,8 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             f.write("["+str(ident)+"] Game ended with score of : "+str(score) + "\n")
             f.write("["+str(ident)+"] T : "+str(T)+"\n")
             ale.reset_game()
+            interpolator.interpolate(current_frame, state[0])
+            state[1:4] = state[0]
             scores.append(score)
             if len(scores) >= constants.lenmoy:
                 moy = sum(scores) / len(scores)
