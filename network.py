@@ -49,9 +49,9 @@ class ConvLayerVars:
 
         w = np.frombuffer(self.W).reshape(filter_shape)
         np.copyto(w, np.asarray(rng.normal(size=filter_shape, scale=constants.weigthInitStdev)))
-        
+ 
         self.b = mp.RawArray(ctypes.c_double, filter_shape[0])
-        
+ 
         b = np.frombuffer(self.b)
         b[:] = 1
 
@@ -76,7 +76,7 @@ class ConvLayerVars:
 
     def npbiases(self):
         return np.frombuffer(self.b)
-        
+ 
     def npmsweights(self):
         return np.frombuffer(self.W_ms).reshape(self.filter_shape) if self.mean_square else None
 
@@ -131,9 +131,9 @@ class FullyConectedLayer:
 
         self.W = T.dmatrix(name = name_prefix + "_W")
         self.b = T.dvector(name = name_prefix + "_b")
-        
+ 
         lin_output = T.dot(inputs, self.W) + self.b
-        
+ 
         self.output = lin_output if activation is None else activation(lin_output)
 
         self.params = [self.W, self.b]
@@ -168,8 +168,7 @@ class DeepQNet:
                                 prefix + "_fcl2",
                                 mean_square_buffer
                             )
-
-        
+ 
         self.holders = [
                         self.conv1_hold, 
                         self.conv2_hold, 
@@ -228,7 +227,7 @@ class DeepQNet:
             for holder in self.holders:
                 self.meansquare_params.append(holder.npmsweights())
                 self.meansquare_params.append(holder.npmsbiases())
-    
+ 
     def save(self, filename):
         array_dict = {}
         for layer in [self.conv1_hold, self.conv2_hold, self.fcl1_hold, self.fcl2_hold]:
@@ -238,7 +237,6 @@ class DeepQNet:
 
         np.savez(filename, array_dict)
 
-        
 class AgentComputation:
     def __init__(self, network, critic, prefix):
         self.inputs = T.dtensor4(name=prefix+"_input")
@@ -254,7 +252,7 @@ class AgentComputation:
 
         best_actions   = T.argmax(network.fcl2.output)
         critic_score   = T.max(critic.fcl2.output)
-        
+ 
         inputsWithNet = network.params + [self.inputs]
 
         with network.mutex:
@@ -310,7 +308,7 @@ class AgentComputation:
             self.initialisedRMSVals = True
             for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
                 np.copyto(ms, accumulator / self.n)
-            
+ 
 
         #Parameter updates
         #i = 0
