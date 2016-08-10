@@ -128,9 +128,9 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
                 discounted_reward += constants.discount_factor * computation.getCriticScore(next_state.transpose(0,3,1,2))[0]
 
         computation.cumulateGradient(
-                    np.asarray(state.transpose(0,3,1,2)), 
-                    np.asarray(action, dtype=np.int32)[np.newaxis], 
-                    np.asarray(discounted_reward)[np.newaxis], ident)
+                    state.transpose(0,3,1,2), 
+                    action, 
+                    discounted_reward, ident)
 
         if t != 0 and (t % constants.batch_size == 0 or ale.game_over()):
             #computing learning rate for current frame

@@ -23,7 +23,7 @@ def prodliste(liste):
     return prod
 
 class ConvLayer:
-    def __init__(self, convl, inputs, filter_shape, stride, name_prefix, input_shape):
+    def __init__(self, inputs, filter_shape, stride, name_prefix, input_shape):
         self.inputs = inputs
         self.W = T.dtensor4(name = name_prefix + "_W")
         self.b = T.dvector(name = name_prefix  + "_b")
@@ -126,7 +126,7 @@ class FullyConectedLayerVars:
 
 
 class FullyConectedLayer:
-    def __init__(self, inputs,  fcl, activation, name_prefix):
+    def __init__(self, inputs,  activation, name_prefix):
         self.inputs = inputs
 
         self.W = T.dmatrix(name = name_prefix + "_W")
@@ -185,7 +185,7 @@ class DeepQNet:
 
 
     def instantiate(self, inputs, prefix):
-        self.conv1 = ConvLayer(self.conv1_hold, 
+        self.conv1 = ConvLayer(
                         inputs,
                         constants.conv1_shape,
                         constants.conv1_strides,
@@ -193,7 +193,7 @@ class DeepQNet:
                         constants.image_shape
                     )
 
-        self.conv2 = ConvLayer(self.conv2_hold, 
+        self.conv2 = ConvLayer(
                         self.conv1.out,
                         constants.conv2_shape,
                         constants.conv2_strides,
@@ -202,15 +202,13 @@ class DeepQNet:
                     )
 
         self.fcl1  = FullyConectedLayer(
-                         self.conv2.out.flatten(ndim=2),
-                         self.fcl1_hold,
+                         self.conv2.out.flatten(),
                          T.nnet.relu,
                          prefix + "_" + self.prefix + "_fcl1"
                     )
 
         self.fcl2  = FullyConectedLayer(
                          self.fcl1.output,
-                         self.fcl2_hold,
                          None,
                          prefix + "_" + self.prefix + "_fcl2"
                     )
@@ -254,16 +252,10 @@ class AgentComputation:
 
         self.initialisedRMSVals = True
 
-        updatable = network.layers
-
-        params = []
-        for layer in updatable:
-            params    += layer.params
-        
         best_actions   = T.argmax(network.fcl2.output)
         critic_score   = T.max(critic.fcl2.output)
         
-        inputsWithNet = params + [self.inputs]
+        inputsWithNet = network.params + [self.inputs]
 
         with network.mutex:
             self._getBestAction = th.function(inputsWithNet, 
@@ -275,17 +267,17 @@ class AgentComputation:
             self._getCriticScore = th.function(inputsWithCritic, [critic_score], name = "getCriticScore")
 
         #Learning inputs
-        self.actions = T.ivector(prefix+'_actionsVector');
-        self.labels  = T.dvector(prefix+'_labels')
+        self.actions = T.iscalar(prefix+'_actionLearn');
+        self.labels  = T.dscalar(prefix+'_label')
 
-        actions_scores = network.fcl2.output[T.arange(self.actions.shape[0]), self.actions]
-        error = T.mean(.5 * (actions_scores - self.labels)**2)
+        actions_score = network.fcl2.output[self.actions]
+        error = .5 * (actions_score - self.labels)**2
 
-        gradients  = [T.grad(error, param)   for param in params] 
+        gradients  = [T.grad(error, param)   for param in network.params] 
+        self.gradientsAcc  = [np.zeros_like(param) for param in network.weight_parameters]
 
-        self.gradientsAcc  = [np.zeros(param.shape) for param in network.weight_parameters]
+        inputsWithNet = network.params + [self.inputs, self.actions, self.labels]
 
-        inputsWithNet = params + [self.inputs, self.actions, self.labels]
         with network.mutex:
             self._computeGradient = th.function(inputsWithNet, gradients, name = "computeGradients")
 
@@ -295,7 +287,7 @@ class AgentComputation:
     def cumulateGradient(self, inputs, actions, labels, ident):
         gradients = self._computeGradient(*self.network.weight_parameters, inputs, actions, labels)
         for accumulator, gradient in zip(self.gradientsAcc, gradients):
-            accumulator += gradient
+            np.add(accumulator, gradient, accumulator)
         self.n += 1
 
     def getBestAction(self, inputs):
