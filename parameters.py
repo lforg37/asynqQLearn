@@ -9,7 +9,7 @@ class constants:
     conv2_shape      = [32, 16, 4, 4]
     conv2_zwidth     = 32
     conv2_strides    = (2, 2)
-    cnn_output_size  = conv2_zwidth * 9 * 9
+    cnn_output_size  = conv2_zwidth * 9 * 9 * 4
     fcl1_nbUnit      = 256
     max_noop         = 30
     final_e_frame    = 4000000
