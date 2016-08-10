@@ -47,7 +47,6 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     
     interpolator = NearestNeighboorInterpolator2D([210,160],[84,84])
 
-    images = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.float32) 
     current_frame = np.empty([210, 160, 1], dtype=np.uint8)
     ale.getScreenGrayscale(current_frame)
     
@@ -72,9 +71,10 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     barrier.wait()
     f.write("After the barrier !")
     f.flush()
+
     while T < constants.nb_max_frames:
-        old_state = state
-        state     = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.float32)
+        state      = next_state
+        next_state = np.empty_like(old_state)
 
         # Determination of epsilon for the current frame
         # Epsilon linearlily decrease from one to self.epsilon_end
@@ -92,7 +92,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
                 action = computation.getBestAction(state.transpose(0,3,1,2))[0]
 
         t += 1
-            
+ 
         reward = 0
 
         i      = 0
@@ -102,18 +102,16 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         while i < constants.action_repeat and not ale.game_over():
             reward += ale.act(actions[action])
             ale.getScreenGrayscale(current_frame)
-            interpolator.interpolate(current_frame, state[i])
+            interpolator.interpolate(current_frame, next_state[i])
             i += 1
 
         while i < constants.action_repeat:
-            state[i] = state[i-1]
+            next_state[i] = next_state[i-1]
             i += 1
 
         #for i in range(constants.action_repeat):
-        #    im = Image.fromarray((state[i].squeeze()*255).astype(np.uint8), mode='L')
+        #    im = Image.fromarray((next_state[i].squeeze()*255).astype(np.uint8), mode='L')
         #    im.save(constants.filebase+str(ident)+'_image_'+'{:08d}'.format(T)+'_'+str(i)+'.png')
-
-        #state = np.maximum.reduce(images[0:i], axis=0) / 255.0
 
         score += reward
         
@@ -127,10 +125,10 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
         if not ale.game_over():
             #Computing the estimated Q value of the new state
             with reader_lock:
-                discounted_reward += constants.discount_factor * computation.getCriticScore(state.transpose(0,3,1,2))[0]
+                discounted_reward += constants.discount_factor * computation.getCriticScore(next_state.transpose(0,3,1,2))[0]
 
         computation.cumulateGradient(
-                    np.asarray(old_state.transpose(0,3,1,2)), 
+                    np.asarray(state.transpose(0,3,1,2)), 
                     np.asarray(action, dtype=np.int32)[np.newaxis], 
                     np.asarray(discounted_reward)[np.newaxis], ident)
 
@@ -152,8 +150,8 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
             f.write("["+str(ident)+"] Game ended with score of : "+str(score) + "\n")
             f.write("["+str(ident)+"] T : "+str(T)+"\n")
             ale.reset_game()
-            interpolator.interpolate(current_frame, state[0])
-            state[1:4] = state[0]
+            interpolator.interpolate(current_frame, next_state[0])
+            next_state[1:4] = next_state[0]
             scores.append(score)
             if len(scores) >= constants.lenmoy:
                 moy = sum(scores) / len(scores)
