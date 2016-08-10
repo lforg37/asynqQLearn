@@ -53,10 +53,10 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     
     #Image.fromarray(current_frame.squeeze(),  mode='L').save('curframe.png')
     
-    state    = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.float32)
+    next_state    = np.empty([constants.action_repeat, 84, 84, 1], dtype=np.float32)
     #Image.fromarray(state[0].squeeze(), mode='L').save('prevgetcurframe.png')
-    interpolator.interpolate(current_frame, state[0])
-    state[1:4] = state[0]
+    interpolator.interpolate(current_frame, next_state[0])
+    next_state[1:4] = next_state[0]
     #Image.fromarray((state[0].squeeze()*255).astype(np.uint8), mode='L').save('getcurframe.png')
 
     score = 0
