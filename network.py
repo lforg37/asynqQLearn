@@ -47,12 +47,12 @@ class ConvLayerVars:
 
         self.W = mp.RawArray(ctypes.c_float, prodliste(filter_shape))
 
-        w = np.frombuffer(self.W).reshape(filter_shape)
+        w = np.frombuffer(self.W, dtype=np.float32).reshape(filter_shape)
         np.copyto(w, np.asarray(rng.normal(size=filter_shape, scale=constants.weigthInitStdev)))
  
         self.b = mp.RawArray(ctypes.c_float, filter_shape[0])
  
-        b = np.frombuffer(self.b)
+        b = np.frombuffer(self.b, dtype=np.float32)
         b[:] = 1
 
         self.filter_shape = filter_shape
@@ -60,11 +60,11 @@ class ConvLayerVars:
         self.mean_square = meansquare 
         if meansquare:
             self.W_ms  = mp.RawArray(ctypes.c_float, prodliste(filter_shape))
-            w_ms = np.frombuffer(self.W_ms)
+            w_ms = np.frombuffer(self.W_ms, dtype=np.float32)
             w_ms[:] = 1
 
             self.b_ms = mp.RawArray(ctypes.c_float, filter_shape[0])
-            b_ms = np.frombuffer(self.b_ms)
+            b_ms = np.frombuffer(self.b_ms, dtype=np.float32)
             b_ms[:] = 1
 
     def update_weights(self, conv):
@@ -72,16 +72,16 @@ class ConvLayerVars:
         np.copyto(self.npbiases(),  conv.npbiases())
 
     def npweights(self):
-        return np.frombuffer(self.W).reshape(self.filter_shape)
+        return np.frombuffer(self.W, dtype=np.float32).reshape(self.filter_shape)
 
     def npbiases(self):
-        return np.frombuffer(self.b)
+        return np.frombuffer(self.b, dtype=np.float32)
  
     def npmsweights(self):
-        return np.frombuffer(self.W_ms).reshape(self.filter_shape) if self.mean_square else None
+        return np.frombuffer(self.W_ms, dtype=np.float32).reshape(self.filter_shape) if self.mean_square else None
 
     def npmsbiases(self):
-        return np.frombuffer(self.b_ms) if self.mean_square else None
+        return np.frombuffer(self.b_ms, dtype=np.float32) if self.mean_square else None
 
 class FullyConectedLayerVars:
     def __init__(self, rng, nb_inputs, nb_outputs, name=None, meansquare=False):
@@ -89,23 +89,23 @@ class FullyConectedLayerVars:
         self.shape = [nb_inputs, nb_outputs]
         self.W     = mp.RawArray(ctypes.c_float, nb_inputs * nb_outputs)
 
-        w = np.frombuffer(self.W).reshape(self.shape)
+        w = np.frombuffer(self.W, dtype = np.float32).reshape(self.shape)
         np.copyto(w, np.asarray(rng.normal(size=self.shape, scale=constants.weigthInitStdev)))
 
         self.b    = mp.RawArray(ctypes.c_float, nb_outputs)
 
-        b = np.frombuffer(self.b)
+        b = np.frombuffer(self.b, dtype = np.float32)
         b[:] = 1
 
         self.mean_square = meansquare
 
         if meansquare:
             self.W_ms  = mp.RawArray(ctypes.c_float, nb_inputs * nb_outputs)
-            w_ms = np.frombuffer(self.W_ms)
+            w_ms = np.frombuffer(self.W_ms, dtype = np.float32)
             w_ms[:] = 1
 
             self.b_ms = mp.RawArray(ctypes.c_float, nb_outputs)
-            b_ms = np.frombuffer(self.b_ms)
+            b_ms = np.frombuffer(self.b_ms, dtype = np.float32)
             b_ms[:] = 1
 
     def update_weights(self, fcl):
@@ -113,16 +113,16 @@ class FullyConectedLayerVars:
         np.copyto(self.npbiases(),  fcl.npbiases())
 
     def npweights(self):
-        return np.frombuffer(self.W).reshape(self.shape)
+        return np.frombuffer(self.W, dtype = np.float32).reshape(self.shape)
 
     def npbiases(self):
-        return np.frombuffer(self.b)
+        return np.frombuffer(self.b, dtype = np.float32)
 
     def npmsweights(self):
-        return np.frombuffer(self.W_ms).reshape(self.shape) if self.mean_square else None
+        return np.frombuffer(self.W_ms, dtype = np.float32).reshape(self.shape) if self.mean_square else None
 
     def npmsbiases(self):
-        return np.frombuffer(self.b_ms) if self.mean_square else None
+        return np.frombuffer(self.b_ms, dtype = np.float32) if self.mean_square else None
 
 
 class FullyConectedLayer:
