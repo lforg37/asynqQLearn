@@ -25,8 +25,8 @@ def prodliste(liste):
 class ConvLayer:
     def __init__(self, inputs, filter_shape, stride, name_prefix, input_shape):
         self.inputs = inputs
-        self.W = T.dtensor4(name = name_prefix + "_W")
-        self.b = T.dvector(name = name_prefix  + "_b")
+        self.W = T.ftensor4(name = name_prefix + "_W")
+        self.b = T.fvector(name = name_prefix  + "_b")
 
         conv_out = conv2d(
                     input = inputs,
@@ -45,12 +45,12 @@ class ConvLayerVars:
     def __init__(self, rng, filter_shape, name=None, meansquare = False):
         self.name = name
 
-        self.W = mp.RawArray(ctypes.c_double, prodliste(filter_shape))
+        self.W = mp.RawArray(ctypes.c_float, prodliste(filter_shape))
 
         w = np.frombuffer(self.W).reshape(filter_shape)
         np.copyto(w, np.asarray(rng.normal(size=filter_shape, scale=constants.weigthInitStdev)))
  
-        self.b = mp.RawArray(ctypes.c_double, filter_shape[0])
+        self.b = mp.RawArray(ctypes.c_float, filter_shape[0])
  
         b = np.frombuffer(self.b)
         b[:] = 1
@@ -59,11 +59,11 @@ class ConvLayerVars:
 
         self.mean_square = meansquare 
         if meansquare:
-            self.W_ms  = mp.RawArray(ctypes.c_double, prodliste(filter_shape))
+            self.W_ms  = mp.RawArray(ctypes.c_float, prodliste(filter_shape))
             w_ms = np.frombuffer(self.W_ms)
             w_ms[:] = 1
 
-            self.b_ms = mp.RawArray(ctypes.c_double, filter_shape[0])
+            self.b_ms = mp.RawArray(ctypes.c_float, filter_shape[0])
             b_ms = np.frombuffer(self.b_ms)
             b_ms[:] = 1
 
@@ -87,12 +87,12 @@ class FullyConectedLayerVars:
     def __init__(self, rng, nb_inputs, nb_outputs, name=None, meansquare=False):
         self.name = name
         self.shape = [nb_inputs, nb_outputs]
-        self.W     = mp.RawArray(ctypes.c_double, nb_inputs * nb_outputs)
+        self.W     = mp.RawArray(ctypes.c_float, nb_inputs * nb_outputs)
 
         w = np.frombuffer(self.W).reshape(self.shape)
         np.copyto(w, np.asarray(rng.normal(size=self.shape, scale=constants.weigthInitStdev)))
 
-        self.b    = mp.RawArray(ctypes.c_double, nb_outputs)
+        self.b    = mp.RawArray(ctypes.c_float, nb_outputs)
 
         b = np.frombuffer(self.b)
         b[:] = 1
@@ -100,11 +100,11 @@ class FullyConectedLayerVars:
         self.mean_square = meansquare
 
         if meansquare:
-            self.W_ms  = mp.RawArray(ctypes.c_double, nb_inputs * nb_outputs)
+            self.W_ms  = mp.RawArray(ctypes.c_float, nb_inputs * nb_outputs)
             w_ms = np.frombuffer(self.W_ms)
             w_ms[:] = 1
 
-            self.b_ms = mp.RawArray(ctypes.c_double, nb_outputs)
+            self.b_ms = mp.RawArray(ctypes.c_float, nb_outputs)
             b_ms = np.frombuffer(self.b_ms)
             b_ms[:] = 1
 
@@ -129,8 +129,8 @@ class FullyConectedLayer:
     def __init__(self, inputs,  activation, name_prefix):
         self.inputs = inputs
 
-        self.W = T.dmatrix(name = name_prefix + "_W")
-        self.b = T.dvector(name = name_prefix + "_b")
+        self.W = T.fmatrix(name = name_prefix + "_W")
+        self.b = T.fvector(name = name_prefix + "_b")
  
         lin_output = T.dot(inputs, self.W) + self.b
  
