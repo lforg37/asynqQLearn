@@ -1,5 +1,6 @@
 import os
 os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
+os.environ['OMP_NUM_THREADS'] = '1'
 
 import theano as th
 from theano import tensor as T
@@ -248,6 +249,8 @@ class AgentComputation:
         self.critic  = critic
         self.n = 0
 
+        self.initialisedRMSVals = True
+
         best_actions   = T.argmax(network.fcl2.output)
         critic_score   = T.max(critic.fcl2.output)
  
@@ -296,24 +299,21 @@ class AgentComputation:
         if self.n == 0:
             return
         #Meansquare value of gradient updates
-        for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
-            np.multiply(ms, constants.decay_factor, ms)
-            B = np.square(accumulator)
-            np.multiply(B, 1-constants.decay_factor, B)
-            np.add(ms, B, ms)
-
-        #Parameter updates
-        #i = 0
-        for param, accumulator, ms in zip(  self.network.weight_parameters, 
+        for ms, accumulator, param in zip(  self.network.meansquare_params, 
                                             self.gradientsAcc, 
-                                            self.network.meansquare_params
-                                         ):
-            #print(i, "Before : ", str(np.sum(param)))
+                                            self.network.weight_parameters):
+            local = ms * constants.decay_factor
+            np.divide(accumulator, self.n, accumulator)
+
+            B = np.square(accumulator)
+            indexes = np.greater(B, constants.level_error)
+            np.multiply(B, 1-constants.decay_factor, B, where=indexes)
+            np.add(local, B, ms, where=indexes)
+
             G = np.sqrt(ms + constants.epsilon_cancel)  
-            np.multiply(G, self.n, G)
             np.divide(accumulator, G, accumulator)
             np.multiply(accumulator, learning_rate, accumulator)
-            np.subtract(param, accumulator, param)
+            np.subtract(param, accumulator, param, where = indexes)
             accumulator.fill(0)
             #print(i, "After : ", str(np.sum(param)))
             #i+=1
