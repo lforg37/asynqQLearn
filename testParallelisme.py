@@ -10,7 +10,7 @@ def overfit(dqn, critic, image, label, ident, barrier):
     def actionValue(image):
         return _actionValue(*dqn.weight_parameters, image)
 
-    #barrier.wait()
+    barrier.wait()
     for i in range(25):
         print("["+str(ident)+"] Label : "+str(label)+", Value : "+str(actionValue(image)))
 
@@ -32,9 +32,9 @@ def main():
     proc = []
     nb_proc = 2
     barrier = mp.Barrier(nb_proc)
+    rng = np.random.RandomState(42)
     for i in range(nb_proc) :
-        image = np.zeros([4,1,84,84])
-        image [:][:][4*i:4*(i+1),4*i:4*(i+1)] = 2*i
+        image = rng.normal(size=[4,1,84,84])
         images.append(image)
         label = 5 * i
         labels.append(label)
@@ -43,10 +43,10 @@ def main():
 
     for p in proc:
         p.start()
-        p.join() #Commenter pour exécution parallèle
+        #p.join() #Commenter pour exécution parallèle
 
-    #for p in proc:
-     #   p.join()
+    for p in proc:
+        p.join()
 
     for image, label in zip(images, labels):
         print("Expected : ", str(label), " got ", str(actionValue(image)))
