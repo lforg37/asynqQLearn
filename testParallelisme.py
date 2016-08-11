@@ -7,11 +7,12 @@ import multiprocessing as mp
 def overfit(dqn, critic, image, label, ident, barrier):
     computation = network.AgentComputation(dqn, critic, "")
     _actionValue = th.function(dqn.params + [computation.inputs], dqn.fcl2.output)
+
     def actionValue(image):
         return _actionValue(*dqn.weight_parameters, image)
 
     barrier.wait()
-    for i in range(25):
+    for i in range(100):
         print("["+str(ident)+"] Label : "+str(label)+", Value : "+str(actionValue(image)))
 
         for k in range(5):
@@ -34,7 +35,7 @@ def main():
     barrier = mp.Barrier(nb_proc)
     rng = np.random.RandomState(42)
     for i in range(nb_proc) :
-        image = rng.normal(size=[4,1,84,84])
+        image = rng.normal(size=[4,1,84,84]).astype(np.float32)
         images.append(image)
         label = 5 * i
         labels.append(label)
@@ -49,7 +50,7 @@ def main():
         p.join()
 
     for image, label in zip(images, labels):
-        print("Expected : ", str(label), " got ", str(actionValue(image)))
+        print("Expected : ", str(label), " got {:3.2f}".format(actionValue(image)[0]))
 
 if __name__ == '__main__':
     main()

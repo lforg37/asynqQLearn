@@ -248,8 +248,6 @@ class AgentComputation:
         self.critic  = critic
         self.n = 0
 
-        self.initialisedRMSVals = True
-
         best_actions   = T.argmax(network.fcl2.output)
         critic_score   = T.max(critic.fcl2.output)
  
@@ -298,17 +296,11 @@ class AgentComputation:
         if self.n == 0:
             return
         #Meansquare value of gradient updates
-        if self.initialisedRMSVals:
-            for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
-                np.multiply(ms, constants.decay_factor, ms)
-                B = np.square(accumulator)
-                np.multiply(B, 1-constants.decay_factor, B)
-                np.add(ms, B, ms)
-        else :
-            self.initialisedRMSVals = True
-            for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
-                np.copyto(ms, accumulator / self.n)
- 
+        for ms, accumulator in zip(self.network.meansquare_params, self.gradientsAcc):
+            np.multiply(ms, constants.decay_factor, ms)
+            B = np.square(accumulator)
+            np.multiply(B, 1-constants.decay_factor, B)
+            np.add(ms, B, ms)
 
         #Parameter updates
         #i = 0
