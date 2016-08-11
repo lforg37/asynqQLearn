@@ -239,7 +239,7 @@ class DeepQNet:
 
 class AgentComputation:
     def __init__(self, network, critic, prefix):
-        self.inputs = T.dtensor4(name=prefix+"_input")
+        self.inputs = T.ftensor4(name=prefix+"_input")
 
         network.instantiate(self.inputs, prefix)
         critic.instantiate(self.inputs, prefix)
