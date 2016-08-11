@@ -12,11 +12,11 @@ def main():
     def actionValue(image):
         return _actionValue(*dqn.weight_parameters, image)
 
-    image = np.zeros([4,1,84,84])
-    image [:][:][0:3,0:3] = 1 
+    image = np.random.RandomState(32).normal(size = [4,1,84,84]).astype(np.float32)
+
     print(image)
 
-    for i in range(250):
+    for i in range(50):
         print(actionValue(image))
         for k in range(5):
             computation.cumulateGradient(image, 0, 12, 0)
