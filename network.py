@@ -265,7 +265,7 @@ class AgentComputation:
             self._getCriticScore = th.function(inputsWithCritic, [critic_score], name = "getCriticScore")
 
         #Learning inputs
-        self.actions = T.iscalar(prefix+'_actionLearn');
+        self.actions = T.lscalar(prefix+'_actionLearn');
         self.labels  = T.dscalar(prefix+'_label')
 
         actions_score = network.fcl2.output[self.actions]
