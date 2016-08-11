@@ -306,14 +306,14 @@ class AgentComputation:
             np.divide(accumulator, self.n, accumulator)
 
             B = np.square(accumulator)
-            indexes = np.greater(B, constants.level_error)
-            np.multiply(B, 1-constants.decay_factor, B, where=indexes)
-            np.add(local, B, ms, where=indexes)
+            #indexes = np.greater(B, constants.level_error)
+            np.multiply(B, 1-constants.decay_factor, B)#, where=indexes)
+            np.add(local, B, ms)#, where=indexes)
 
             G = np.sqrt(ms + constants.epsilon_cancel)  
             np.divide(accumulator, G, accumulator)
             np.multiply(accumulator, learning_rate, accumulator)
-            np.subtract(param, accumulator, param, where = indexes)
+            np.subtract(param, accumulator, param)#, where = indexes)
             accumulator.fill(0)
             #print(i, "After : ", str(np.sum(param)))
             #i+=1
