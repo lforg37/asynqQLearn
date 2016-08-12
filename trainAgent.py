@@ -30,7 +30,7 @@ def main():
     T.value = 0
     TLock = mp.Lock()
 
-    learning_rate = 7 * 10**-4
+    learning_rate = 10**-3
     
     barrier = mp.Barrier(constants.nb_agent) 
 

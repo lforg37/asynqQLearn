@@ -134,7 +134,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
 
         if t != 0 and (t % constants.batch_size == 0 or ale.game_over()):
             #computing learning rate for current frame
-            lr = init_learning_rate# * (1 - T/constants.nb_max_frames)
+            lr = init_learning_rate * (1 - T/constants.nb_max_frames)
             with writer_lock:
                 computation.applyGradient(lr)
             t = 0
