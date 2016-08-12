@@ -22,6 +22,7 @@ class constants:
     critic_up_freq   = 40000
     epsilon_cancel   = 1
     weigthInitStdev  = 0.25
+    freq_fresh_eps   = 200
     level_error      = 0.000001
 
     filebase = 'output_agent_'

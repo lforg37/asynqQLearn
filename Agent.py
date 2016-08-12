@@ -60,6 +60,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     #Image.fromarray((state[0].squeeze()*255).astype(np.uint8), mode='L').save('getcurframe.png')
 
     score = 0
+    fc    = 0 
 
     if ident == 0:
         computation.initialisedRMSVals = False
@@ -75,6 +76,15 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     while T < constants.nb_max_frames:
         state      = next_state
         next_state = np.empty_like(state)
+
+        if (fc % constants.freq_fresh_eps) == 0:
+            rnd = random()
+            if   rnd < 0.4:
+                epsilon_end = 0.1
+            elif rnd < 0.7:
+                epsilon_end = 0.01
+            else:
+                epsilon_end = 0.5
 
         # Determination of epsilon for the current frame
         # Epsilon linearlily decrease from one to self.epsilon_end
@@ -159,6 +169,8 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
                 f.flush()
                 scores = []
             score = 0
+
+        fc += 1
 
         with t_lock:
             T = T_glob.value
