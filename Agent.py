@@ -6,7 +6,6 @@ from improc import NearestNeighboorInterpolator2D
 from utils import LockManager
 from network import AgentComputation
 #from PIL import Image
-#il faudrait toujours etre agréable avec sa tutrice
 
 import os
 
