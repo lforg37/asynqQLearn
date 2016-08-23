@@ -8,8 +8,9 @@ from network import AgentComputation
 #from PIL import Image
 
 import os
-
 import numpy as np
+
+import pdb
 
 def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, init_learning_rate, barrier):
 
@@ -23,6 +24,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     ale.setBool(b'color_averaging', True)
     ale.loadROM(game_path)
     actions = ale.getMinimalActionSet()
+    pdb.set_trace()
 
     #Create Agent network based on shared weights wrapped in mainNet and criticNet
     computation = AgentComputation(mainNet, criticNet, 'computation_'+str(ident))
@@ -58,6 +60,16 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     interpolator.interpolate(current_frame, next_state[0])
     next_state[1:4] = next_state[0]
     #Image.fromarray((state[0].squeeze()*255).astype(np.uint8), mode='L').save('getcurframe.png')
+
+    import matplotlib.pyplot as plt
+    nb_images=5    
+    for p in range(nb_images):
+        plt.subplot(1,nb_images,p+1)
+        if p==0: 
+            plt.imshow(current_frame[:,:,0], interpolation='none', cmap='gray')
+        else:
+            plt.imshow(next_state[p-1,:,:,0],interpolation='none', cmap='gray')
+    plt.show() 
 
     score = 0
     fc    = 0 
