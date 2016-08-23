@@ -34,14 +34,18 @@ def main():
     
     barrier = mp.Barrier(constants.nb_agent) 
 
-    for i in range(0, constants.nb_agent):
-        agentpool.append(mp.Process(target = AgentProcess, args=[rwlock, dqn, dqn_critic, T, TLock, romname, i, learning_rate, barrier]))
-    
-    for t in agentpool:
-        t.start()
+    if 0:
+        for i in range(0, constants.nb_agent):
+            agentpool.append(mp.Process(target = AgentProcess, args=[rwlock, dqn, dqn_critic, T, TLock, romname, i, learning_rate, barrier]))
+        for t in agentpool:
+            t.start()
 
-    for t in agentpool:
-        t.join()
+        for t in agentpool:
+            t.join()
+    else:
+        for i in range(0, constants.nb_agent):
+            AgentProcess(*[rwlock, dqn, dqn_critic, T, TLock, romname, i, learning_rate, barrier])
+    
 
     dqn.save('network')
 

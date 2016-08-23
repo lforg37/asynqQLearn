@@ -16,7 +16,7 @@ class constants:
     action_repeat    = 4
     discount_factor  = 0.99
     decay_factor     = 0.99
-    nb_agent         = 20
+    nb_agent         = 1
     nb_max_frames    = 80000000
     batch_size       = 5
     critic_up_freq   = 40000
