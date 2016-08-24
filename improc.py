@@ -52,17 +52,21 @@ class BilinearInterpolator2D:
             coord_old_space_y = y * scale_y
             self.y0_array[y] = floor(coord_old_space_y)
             self.y1_array[y] = ceil(coord_old_space_y)
-            self.py_array[y] = y1 - coord_old_space_y
+            self.py_array[y] = self.y1_array[y] - coord_old_space_y
 
         for x in range(0, w_target):
             coord_old_space_x = x * scale_x
 
             self.x0_array[x] = np.floor(coord_old_space_x)
             self.x1_array[x] = np.ceil(coord_old_space_x)
-            self.px_array[x] = x1 - coord_old_space_x 
+            self.px_array[x] = self.x1_array[x] - coord_old_space_x 
 
         self.pxd_array = np.ones(w_target) - self.px_array
         self.pyh_array = np.ones(h_target) - self.py_array
+        self.px_array  = self.px_array[np.newaxis, :, np.newaxis]
+        self.pxd_array = self.pxd_array[np.newaxis, :, np.newaxis]
+        self.py_array  = self.py_array[:, np.newaxis, np.newaxis]
+        self.pyh_array = self.pyh_array[:, np.newaxis, np.newaxis]
 
     def interpolate(self, source, buf = None):
         x_haut_gauche = source[self.y1_array][:,self.x0_array].astype(np.float64)[:]
@@ -81,7 +85,7 @@ class BilinearInterpolator2D:
         np.multiply(x_bas_gauche, self.py_array, x_bas_gauche)
 
         np.add(x_haut_gauche, x_bas_gauche, x_haut_gauche)
-        target = buf or x_haut_gauche
+        target = x_haut_gauche if buf is None else buf
         np.divide(x_haut_gauche, 255, target)
         
         return target

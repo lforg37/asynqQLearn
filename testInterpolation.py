@@ -8,7 +8,7 @@ ale = ALEInterface()
 ale.setInt(b'random_seed', randrange(0,256,1))
 
 #ale.setBool(b'color_averaging', True)
-ale.loadROM(b"roms/breakout.bin")
+ale.loadROM(b"breakout.bin")
 actions = ale.getMinimalActionSet()
 
 interpolator = BilinearInterpolator2D([210,160],[84,84])
