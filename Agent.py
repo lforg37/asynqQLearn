@@ -2,7 +2,7 @@ from parameters import constants
 from ale_python_interface import ALEInterface
 from random import random, randrange
 import sys
-from improc import NearestNeighboorInterpolator2D
+from improc import BilinearInterpolator2D
 from utils import LockManager
 from network import AgentComputation
 #from PIL import Image
@@ -21,7 +21,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     ale = ALEInterface()
     ale.setInt(b'random_seed', randrange(0,256,1))
     #ale.setBool(b'display_screen', True)
-    ale.setBool(b'color_averaging', True)
+    ale.setBool(b'color_averaging', False)
     ale.loadROM(game_path)
     actions = ale.getMinimalActionSet()
     pdb.set_trace()
@@ -47,7 +47,7 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     else:
         epsilon_end = 0.5
     
-    interpolator = NearestNeighboorInterpolator2D([210,160],[84,84])
+    interpolator = BilinearInterpolator2D([210,160],[84,84])
 
     current_frame = np.empty([210, 160, 1], dtype=np.uint8)
     ale.getScreenGrayscale(current_frame)
@@ -61,18 +61,9 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     next_state[1:4] = next_state[0]
     #Image.fromarray((state[0].squeeze()*255).astype(np.uint8), mode='L').save('getcurframe.png')
 
-    import matplotlib.pyplot as plt
-    nb_images=5    
-    for p in range(nb_images):
-        plt.subplot(1,nb_images,p+1)
-        if p==0: 
-            plt.imshow(current_frame[:,:,0], interpolation='none', cmap='gray')
-        else:
-            plt.imshow(next_state[p-1,:,:,0],interpolation='none', cmap='gray')
-    plt.show() 
-
     score = 0
-    fc    = 0 
+
+    eps_decrease = - epsilon_end / constants.final_e_frame
 
     if ident == 0:
         computation.initialisedRMSVals = False
@@ -85,25 +76,23 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
     f.write("After the barrier !")
     f.flush()
 
+    rnd = random()
+    if   rnd < 0.4:
+        epsilon_end = 0.1
+    elif rnd < 0.7:
+        epsilon_end = 0.01
+    else:
+        epsilon_end = 0.5
+
     while T < constants.nb_max_frames:
         state      = next_state
         next_state = np.empty_like(state)
 
-        if (fc % constants.freq_fresh_eps) == 0:
-            rnd = random()
-            if   rnd < 0.4:
-                epsilon_end = 0.1
-            elif rnd < 0.7:
-                epsilon_end = 0.01
-            else:
-                epsilon_end = 0.5
-
         # Determination of epsilon for the current frame
         # Epsilon linearlily decrease from one to self.epsilon_end
         # between frame 0 and frame constants.final_e_frame
-        epsilon = epsilon_end
-        if T < constants.final_e_frame:
-            epsilon = 1 + (epsilon_end - 1) * T / constants.final_e_frame
+        epsilon += eps_decrease
+        epsilon = max(epsilon, epsilon_end)
 
         #Choosing current action based on epsilon greedy behaviour
         rnd = random()
@@ -181,8 +170,6 @@ def AgentProcess(rwlock, mainNet, criticNet, T_glob, T_lock, game_path, ident, i
                 f.flush()
                 scores = []
             score = 0
-
-        fc += 1
 
         with t_lock:
             T = T_glob.value
